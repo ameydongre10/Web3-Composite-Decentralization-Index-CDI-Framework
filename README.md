@@ -1,70 +1,12 @@
-# Composite Decentralization Index (CDI) Framework for Web3 Systems
+🌐 Dynamic Decentralization Intelligence System (DDIS) for Web3From static scorecards to predictive intelligence. DDIS is an industry-oriented analytics framework that measures Web3 decentralization over time, detects "centralization drift," and forecasts governance risks before they manifest.🚀 Executive SummaryCurrent decentralization metrics are often static, one-dimensional, and retrospective. DDIS shifts the paradigm by computing a Dynamic Composite Decentralization Index (CDI). By integrating network topology, governance behavior, and economic concentration into a rolling-window forecasting model, the system provides a proactive early-warning system for protocol health.🧠 Core ArchitectureThe system operates across a 7-layer intelligence stack, moving from raw on-chain data to explainable risk probabilities.The Dynamic Index FormulaThe core engine calculates decentralization as a function of time:$$CDI(t) = \sum_{i=1}^{k} w_i(t) \cdot F_i(t)$$$F_i(t)$: Dimension score (Economic, Governance, Structural, Dev).$w_i(t)$: Adaptive weights calculated via entropy-based sensing.$t$: Rolling time window for temporal drift detection.✨ Key FeaturesFour-Dimensional Scoring: Tracks Economic, Governance, Structural (Network), and Development (Bus Factor) metrics.Temporal Intelligence: Uses change-point detection to identify when a protocol begins to "drift" toward centralization.Predictive Risk Layer: Generates a $[0, 1]$ probability score for governance capture and cartel formation.Adaptive Weighting: Unlike static indexes, DDIS uses an entropy engine to adjust the importance of metrics based on current network volatility.Live Dashboard: Real-time visualization with local-chain connectivity (Ganache) and external value feeds.🛠 Tech StackLayerTechnologiesFrontendHTML5, CSS3, ES6+ JavaScript, Chart.jsBlockchainEthers.js v6, Ganache (Local Node)Data LogicCustom Entropy Engine, Rolling-window AnalysisIntegrationNeural GraphX Endpoint Pattern, JSON Fetch Adapters📊 Functional OutputsThe system provides a suite of diagnostic tools for decision-makers:📈 CDI(t) Trajectory: Visualizing the health of decentralization over months or years.🔥 Governance Heatmaps: Identifying clusters of voting power and delegation monopolies.🕸 Network Centrality: Mapping node distribution and topology.🚨 Drift Alerts: Automated notifications when structural breaks occur in the decentralization trend.🗺 Roadmap & Future Scope[ ] Phase 1: Core CDI Engine & Local Chain Integration (Current)[ ] Phase 2: Contract-level event ingestion (Proposals/Votes/Treasury)[ ] Phase 3: Supervised weight learning using historical exploit datasets[ ] Phase 4: Graph Neural Networks (GNN) for advanced structural forecasting[ ] Phase 5: Cross-chain support (L2s, Solana, Polkadot)👥 StakeholdersProtocol Foundations: Monitor long-term ecosystem health.Investors: Conduct deep due diligence on structural resilience.Regulators: Access evidence-based decentralization assessments.Security Teams: Detect concentration patterns that precede exploits.📝 AbstractThe Dynamic Decentralization Intelligence System transforms decentralization analysis from static scoring into continuous, predictive risk intelligence. By quantifying decentralization across four critical dimensions and applying probabilistic modeling, the system surfaces actionable insights. It bridges the gap between academic rigor and operational monitoring, providing the "radar" necessary for the next generation of resilient Web3 protocols.🛠 Installation & Setup (Prototype)Bash# Clone the repository
+git clone https://github.com/your-repo/ddis-web3.git
 
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+# Install dependencies
+npm install
 
-[cite_start]This repository contains the data, Python scripts, and analysis pipelines for computing the **Composite Decentralization Index (CDI)**, a multi-dimensional metric designed to quantify decentralization in Web3 systems[cite: 7, 8, 233, 234]. 
+# Start a local Ganache instance
+ganache-cli
 
-[cite_start]The research was conducted by Amey Dogre, Anand Rawat, Ashish Kumar Singh, Anshul Atre, and Anand Sen at the Pranveer Singh Institute of Technology, Kanpur, India[cite: 3, 4].
-
-## 📖 Overview
-
-[cite_start]While the theoretical benefits of decentralization are widely promoted, empirical measurement remains underdeveloped[cite: 122]. [cite_start]This project proposes the CDI to benchmark decentralization across major Decentralized Finance (DeFi) protocols by unifying three distinct structural properties[cite: 81]:
-* [cite_start]**Economic Control:** Token ownership inequality[cite: 87, 114].
-* [cite_start]**Political Control:** Governance voting power concentration[cite: 87, 114].
-* [cite_start]**Operational Usage:** Transaction distribution and participation diversity[cite: 86, 87, 114].
-
-[cite_start]A key finding of this research is the **Decentralization Paradox**, which highlights a structural imbalance where transactional participation is widespread, but governance power and token ownership remain highly concentrated[cite: 10, 116, 117].
-
-## 🧮 Methodology
-
-[cite_start]The CDI is defined as a weighted linear aggregation of three normalized indicators[cite: 89, 126]:
-
-1.  [cite_start]**Gini Coefficient ($G$):** Measures inequality in token ownership[cite: 127]. [cite_start]Lower values indicate a more equitable distribution[cite: 127].
-2.  [cite_start]**Herfindahl-Hirschman Index ($HHI$):** Measures the concentration of governance influence[cite: 128]. [cite_start]Lower values correspond to greater decentralization[cite: 129].
-3.  [cite_start]**Shannon Entropy ($E$):** Measures the dispersion of transaction activity[cite: 130]. [cite_start]Higher entropy implies more decentralized economic participation[cite: 131].
-
-[cite_start]Each metric is normalized to the interval [0, 1][cite: 132]. [cite_start]The formula for CDI is[cite: 133]:
-
-$$CDI=(w_{1}\cdot N(G))+(w_{2}\cdot N(HHI))+(w_{3}\cdot N(E))$$
-
-[cite_start]To avoid subjective bias, this study assigns equal weights ($w_{1}=w_{2}=w_{3}=\frac{1}{3}$)[cite: 103, 136]. 
-
-### Interpretation Scale
-* [cite_start]**0.0 - 0.3:** Highly centralized [cite: 112]
-* [cite_start]**0.3 - 0.6:** Moderately decentralized [cite: 112]
-* [cite_start]**0.6 - 1.0:** Highly decentralized [cite: 112]
-
-## 📊 Data Collection
-
-[cite_start]The evaluation is based on publicly available on-chain data spanning a 90-day observation window in Q1 2024[cite: 140, 194]. [cite_start]Data was collected using Dune Analytics queries and Etherscan APIs[cite: 234]. 
-
-[cite_start]The analyzed DeFi protocols include[cite: 193]:
-* [cite_start]Uniswap v3 [cite: 193]
-* [cite_start]Aave v3 [cite: 193]
-* [cite_start]SushiSwap [cite: 193]
-* [cite_start]Curve Finance [cite: 193]
-* [cite_start]Compound [cite: 193]
-
-[cite_start]The dataset encompasses token balances for the top 10,000 externally owned addresses, voting power distributions for recent proposals, and transaction-level activity[cite: 142, 143, 144].
-
-## 🚀 Results Summary
-
-[cite_start]Results indicate consistent CDI scores ranging from 0.41 to 0.44 across the analyzed protocols, suggesting moderate decentralization[cite: 202]. 
-
-* [cite_start]**Uniswap v3:** 0.43 [cite: 201]
-* [cite_start]**Aave v3:** 0.44 [cite: 201]
-* [cite_start]**SushiSwap:** 0.42 [cite: 201]
-* [cite_start]**Curve Finance:** 0.41 [cite: 201]
-* [cite_start]**Compound:** 0.43 [cite: 201]
-
-[cite_start]Sensitivity analysis confirms that the CDI is robust, with scores varying within ±0.03 and protocol rankings remaining unchanged even when applying alternative weighting schemes (e.g., governance-heavy or usage-heavy weights)[cite: 222, 223].
-
-## 🛠️ Reproducibility
-
-[cite_start]To ensure reproducibility, all data processing and computation scripts are provided in Python[cite: 233]. [cite_start]The preprocessing pipeline features[cite: 234, 235]:
-* [cite_start]Address filtering (excluding smart contracts) [cite: 236]
-* [cite_start]Normalization of metric values [cite: 237]
-* [cite_start]Aggregation of governance voting records [cite: 238]
-
-*(Instructions for running the python scripts or Jupyter notebooks would go here)*
+# Run the intelligence dashboard
+npm start
+Developed for the future of resilient, distributed networks.

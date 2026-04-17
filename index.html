@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DeFi Decentralization Dashboard — CDI Framework</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23378ADD'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='white'>⬡</text></svg>"/>
+</head>
+<body>
+  <div class="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">⬡</div>
+        <div>
+          <div class="logo-title">CDI Monitor</div>
+          <div class="logo-sub">Web3 Analytics</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a class="nav-item active" href="#overview">
+          <span class="nav-icon">◈</span> Overview
+        </a>
+        <a class="nav-item" href="#protocols">
+          <span class="nav-icon">◉</span> Protocols
+        </a>
+        <a class="nav-item" href="#prices">
+          <span class="nav-icon">◎</span> Prices
+        </a>
+        <a class="nav-item" href="#paradox">
+          <span class="nav-icon">⊕</span> Paradox
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="live-badge">
+          <span class="pulse"></span>
+          <span>Live Feed</span>
+        </div>
+        <div class="countdown-wrap">
+          <div class="countdown-label">Next refresh</div>
+          <div class="countdown-ring">
+            <svg viewBox="0 0 36 36" class="ring-svg">
+              <circle cx="18" cy="18" r="14" fill="none" stroke="#2a2a3a" stroke-width="3"/>
+              <circle id="ring-circle" cx="18" cy="18" r="14" fill="none"
+                stroke="#378ADD" stroke-width="3"
+                stroke-dasharray="87.96 87.96"
+                stroke-dashoffset="0"
+                stroke-linecap="round"
+                transform="rotate(-90 18 18)"/>
+            </svg>
+            <span id="countdown-num">30</span>
+          </div>
+        </div>
+        <div class="last-updated">Updated: <span id="last-update-time">—</span></div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+
+      <!-- Header -->
+      <header class="top-bar">
+        <div>
+          <h1 class="page-title">Decentralization Intelligence Dashboard</h1>
+          <p class="page-sub">Dynamic CDI(t) Framework · Economic + Governance + Structural + Development Dimensions</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-graphx" onclick="fetchGraphXValue()">Fetch GraphX</button>
+          <span id="graphx-status" class="graphx-status offline">GraphX: Idle</span>
+          <button class="btn-ganache" onclick="connectGanache()">Connect Ganache</button>
+          <span id="ganache-status" class="ganache-status offline">Ganache: Offline</span>
+          <select id="refresh-interval" class="select-ctrl" onchange="setRefreshInterval(this.value)">
+            <option value="15">Refresh: 15s</option>
+            <option value="30" selected>Refresh: 30s</option>
+            <option value="60">Refresh: 60s</option>
+          </select>
+          <button class="btn-refresh" onclick="fullRefresh()">↻ Refresh Now</button>
+        </div>
+      </header>
+
+      <!-- Metric cards -->
+      <section id="overview" class="section">
+        <div class="metrics-row">
+          <div class="metric-card" style="--accent:#378ADD">
+            <div class="mc-label">Avg CDI Score</div>
+            <div class="mc-value" id="avg-cdi">—</div>
+            <div class="mc-badge" id="cdi-interp">—</div>
+            <div class="mc-bar"><div class="mc-bar-fill" id="cdi-fill" style="background:#378ADD"></div></div>
+          </div>
+          <div class="metric-card" style="--accent:#E24B4A">
+            <div class="mc-label">Avg Gini Coefficient</div>
+            <div class="mc-value" id="avg-gini">—</div>
+            <div class="mc-badge danger">Ownership Concentration</div>
+            <div class="mc-bar"><div class="mc-bar-fill" id="gini-fill" style="background:#E24B4A"></div></div>
+          </div>
+          <div class="metric-card" style="--accent:#1D9E75">
+            <div class="mc-label">Avg Entropy</div>
+            <div class="mc-value" id="avg-entropy">—</div>
+            <div class="mc-badge success">Distributed Usage</div>
+            <div class="mc-bar"><div class="mc-bar-fill" id="entropy-fill" style="background:#1D9E75"></div></div>
+          </div>
+          <div class="metric-card" style="--accent:#EF9F27">
+            <div class="mc-label">Avg HHI</div>
+            <div class="mc-value" id="avg-hhi">—</div>
+            <div class="mc-badge warning">Governance Conc.</div>
+            <div class="mc-bar"><div class="mc-bar-fill" id="hhi-fill" style="background:#EF9F27"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Ganache Node Telemetry</div>
+            <div class="card-sub">Live JSON-RPC values from local chain</div>
+          </div>
+        </div>
+        <div id="ganache-meta" class="ganache-meta-grid">
+          <div class="meta-item"><span class="meta-k">Current Block</span><span id="meta-block" class="meta-v">-</span></div>
+          <div class="meta-item"><span class="meta-k">Gas Price</span><span id="meta-gas-price" class="meta-v">-</span></div>
+          <div class="meta-item"><span class="meta-k">Gas Limit</span><span id="meta-gas-limit" class="meta-v">-</span></div>
+          <div class="meta-item"><span class="meta-k">Hardfork</span><span id="meta-hardfork" class="meta-v">-</span></div>
+          <div class="meta-item"><span class="meta-k">Network ID</span><span id="meta-network-id" class="meta-v">-</span></div>
+          <div class="meta-item"><span class="meta-k">RPC Server</span><span id="meta-rpc" class="meta-v">-</span></div>
+          <div class="meta-item"><span class="meta-k">Mining Status</span><span id="meta-mining" class="meta-v">-</span></div>
+        </div>
+      </section>
+
+      <section class="section card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Neural GraphX Value Feed</div>
+            <div class="card-sub">Connect endpoint and display latest GraphX value in real time</div>
+          </div>
+        </div>
+        <div class="graphx-config">
+          <label class="graphx-label" for="graphx-endpoint">Endpoint</label>
+          <input id="graphx-endpoint" class="graphx-input" type="text" value="http://127.0.0.1:8080/graphx/value" />
+          <label class="graphx-label" for="graphx-api-key">API Key (optional)</label>
+          <input id="graphx-api-key" class="graphx-input" type="text" placeholder="Bearer token if required" />
+        </div>
+        <div class="graphx-metrics">
+          <div class="graphx-metric-item">
+            <span class="graphx-k">GraphX Value</span>
+            <span id="graphx-value" class="graphx-v">-</span>
+          </div>
+          <div class="graphx-metric-item">
+            <span class="graphx-k">Source Timestamp</span>
+            <span id="graphx-timestamp" class="graphx-v">-</span>
+          </div>
+          <div class="graphx-metric-item">
+            <span class="graphx-k">Latency</span>
+            <span id="graphx-latency" class="graphx-v">-</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Formalization + Adaptive Weights -->
+      <section class="section grid2">
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Phase 1 — Dynamic Problem Formalization</div>
+              <div class="card-sub">Can decentralization be measured dynamically, structurally, and predictively?</div>
+            </div>
+          </div>
+          <div class="formula-wrap">
+            <div class="formula-line">CDI(t) = Σ w<sub>i</sub>(t) · F<sub>i</sub>(t)</div>
+            <div class="formula-meta">F<sub>i</sub>(t): decentralization dimension scores · w<sub>i</sub>(t): adaptive weights · t: rolling time window</div>
+          </div>
+          <div id="dimension-score-grid" class="dim-grid"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Phase 4 — Adaptive Weight Learning</div>
+              <div class="card-sub">Entropy-weight method with rolling recalibration</div>
+            </div>
+          </div>
+          <div id="weight-list" class="weight-list"></div>
+          <div class="model-note">
+            Alternative engines supported in design: PCA factor loading and supervised event-prediction weighting.
+          </div>
+        </div>
+
+      </section>
+
+      <!-- CDI Time Series -->
+      <section class="section card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">CDI(t) — Time Evolution</div>
+            <div class="card-sub">Rolling 30-day computation displayed across a 90-day horizon</div>
+          </div>
+          <div class="proto-toggles" id="proto-btns"></div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="cdiChart" role="img" aria-label="CDI time series for 5 DeFi protocols over 90 days">
+            CDI time evolution for Uniswap, Aave, SushiSwap, Curve, and Compound.
+          </canvas>
+        </div>
+        <div class="chart-legend" id="chart-legend"></div>
+      </section>
+
+      <!-- Temporal + Risk -->
+      <section class="section grid2">
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Phase 5 — Temporal Modeling</div>
+              <div class="card-sub">Volatility, change-points, and structural breaks</div>
+            </div>
+          </div>
+          <div id="temporal-signals" class="signal-list"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Phase 6 — Risk Forecasting Layer</div>
+              <div class="card-sub">Probability of centralization risk, governance capture, and cartel formation</div>
+            </div>
+          </div>
+          <div id="risk-forecast" class="risk-forecast-list"></div>
+        </div>
+
+      </section>
+
+      <!-- Governance + Structural outputs -->
+      <section class="section grid2">
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Governance Concentration Heatmap</div>
+              <div class="card-sub">Higher intensity indicates stronger concentration risk</div>
+            </div>
+          </div>
+          <div id="gov-heatmap" class="gov-heatmap"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Network Centrality Distribution Plot</div>
+              <div class="card-sub">Top-holder centrality share over percentile bands</div>
+            </div>
+          </div>
+          <div class="chart-wrap" style="height:240px">
+            <canvas id="centralityChart" role="img" aria-label="Network centrality distribution across protocols"></canvas>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Drift alerts -->
+      <section class="section card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Decentralization Drift Alerts</div>
+            <div class="card-sub">Alerts triggered by sustained CDI decline and temporal instability</div>
+          </div>
+        </div>
+        <div id="drift-alerts" class="drift-alert-list"></div>
+      </section>
+
+      <!-- Protocol table + Prices -->
+      <section class="section grid2">
+
+        <div id="protocols" class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Protocol Rankings</div>
+              <div class="card-sub">Sorted by CDI score</div>
+            </div>
+          </div>
+          <table class="proto-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Protocol</th>
+                <th>CDI</th>
+                <th>Gini</th>
+                <th>Entropy</th>
+                <th>Risk</th>
+              </tr>
+            </thead>
+            <tbody id="proto-rows"></tbody>
+          </table>
+        </div>
+
+        <div id="prices" class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Live Token Prices</div>
+              <div class="card-sub">Updates every 3 seconds</div>
+            </div>
+          </div>
+          <div id="price-list"></div>
+        </div>
+
+      </section>
+
+      <!-- Paradox + Entropy bars -->
+      <section id="paradox" class="section grid2">
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Decentralization Paradox</div>
+              <div class="card-sub">Operational vs Governance gap</div>
+            </div>
+            <span class="info-badge" title="High operational entropy but low governance decentralization reveals the paradox.">ℹ</span>
+          </div>
+          <div id="paradox-list"></div>
+          <div class="paradox-legend">
+            <span class="pl-dot" style="background:#378ADD"></span> Operational &nbsp;
+            <span class="pl-dot" style="background:#E24B4A"></span> Governance
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Dimension Breakdown</div>
+          <div class="card-sub" style="margin-bottom:12px">Normalized component scores per protocol</div>
+          <div class="chart-wrap" style="height:220px">
+            <canvas id="radarChart" role="img" aria-label="Radar chart of CDI dimensions per protocol">
+              Radar chart showing Gini, HHI, and Entropy normalized scores per protocol.
+            </canvas>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Data and architecture -->
+      <section class="section grid2">
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Phase 2 — Data Infrastructure</div>
+              <div class="card-sub">On-chain, governance, transaction graph, and development inputs</div>
+            </div>
+          </div>
+          <div class="source-grid">
+            <div class="source-item">
+              <div class="source-title">On-Chain Data</div>
+              <div class="source-text">Token balances, voting logs, delegation links, transaction history, LP participation</div>
+            </div>
+            <div class="source-item">
+              <div class="source-title">Governance Data</div>
+              <div class="source-text">Proposal participation, vote weights, direction correlation, delegation network</div>
+            </div>
+            <div class="source-item">
+              <div class="source-title">Transaction Graph Data</div>
+              <div class="source-text">Nodes: addresses · Edges: transfers and governance interactions</div>
+            </div>
+            <div class="source-item">
+              <div class="source-title">Development Data</div>
+              <div class="source-text">Contributor distribution, commit frequency, bus factor</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Phase 7 — System Architecture</div>
+              <div class="card-sub">End-to-end operational pipeline</div>
+            </div>
+          </div>
+          <div id="pipeline-flow" class="pipeline-flow"></div>
+        </div>
+
+      </section>
+
+      <!-- Footer -->
+      <footer class="dash-footer">
+        Dynamic CDI Research Stack · Data Sources: Ethereum Archive Node, Etherscan API, Dune, GitHub · Storage: PostgreSQL / BigQuery / Neo4j
+      </footer>
+
+    </main>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

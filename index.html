@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DeFi Decentralization Dashboard — CDI Framework</title>
+  <title>Web3 Composite Decentralization Index (CDI) — Platform Dashboard</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23378ADD'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='white'>⬡</text></svg>"/>
 </head>
 <body>
   <div class="app">
 
-    <!-- Sidebar -->
+    <!-- Sidebar Navigation -->
     <aside class="sidebar">
       <div class="logo">
         <div class="logo-icon">⬡</div>
         <div>
-          <div class="logo-title">CDI Monitor</div>
-          <div class="logo-sub">Web3 Analytics</div>
+          <div class="logo-title">CDI Platform</div>
+          <div class="logo-sub">Web3 Analytics v1.0</div>
         </div>
       </div>
       <nav class="nav">
@@ -24,22 +24,31 @@
           <span class="nav-icon">◈</span> Overview
         </a>
         <a class="nav-item" href="#protocols">
-          <span class="nav-icon">◉</span> Protocols
+          <span class="nav-icon">◉</span> Protocols (CRUD)
+        </a>
+        <a class="nav-item" href="#sensitivity">
+          <span class="nav-icon">⚗</span> Sensitivity Lab
+        </a>
+        <a class="nav-item" href="#alerts">
+          <span class="nav-icon">🚨</span> Drift & Alerts
         </a>
         <a class="nav-item" href="#prices">
-          <span class="nav-icon">◎</span> Prices
+          <span class="nav-icon">◎</span> Token Feeds
         </a>
         <a class="nav-item" href="#paradox">
-          <span class="nav-icon">⊕</span> Paradox
+          <span class="nav-icon">⊕</span> Paradox & Radar
+        </a>
+        <a class="nav-item" href="/api/v1/docs" target="_blank" rel="noopener">
+          <span class="nav-icon">⚡</span> Swagger API Docs ↗
         </a>
       </nav>
       <div class="sidebar-footer">
         <div class="live-badge">
           <span class="pulse"></span>
-          <span>Live Feed</span>
+          <span id="backend-indicator">Backend Active</span>
         </div>
         <div class="countdown-wrap">
-          <div class="countdown-label">Next refresh</div>
+          <div class="countdown-label">Next telemetry sync</div>
           <div class="countdown-ring">
             <svg viewBox="0 0 36 36" class="ring-svg">
               <circle cx="18" cy="18" r="14" fill="none" stroke="#2a2a3a" stroke-width="3"/>
@@ -57,119 +66,70 @@
       </div>
     </aside>
 
-    <!-- Main content -->
+    <!-- Main Content Area -->
     <main class="main">
 
-      <!-- Header -->
+      <!-- Top Header & Action Controls -->
       <header class="top-bar">
         <div>
-          <h1 class="page-title">Decentralization Intelligence Dashboard</h1>
-          <p class="page-sub">Dynamic CDI(t) Framework · Economic + Governance + Structural + Development Dimensions</p>
+          <h1 class="page-title">Composite Decentralization Index (CDI)</h1>
+          <p class="page-sub">Scientific Multi-Dimensional Assessment · Economic + Governance + Structural + Development</p>
         </div>
         <div class="header-actions">
-          <button class="btn-graphx" onclick="fetchGraphXValue()">Fetch GraphX</button>
-          <span id="graphx-status" class="graphx-status offline">GraphX: Idle</span>
-          <button class="btn-ganache" onclick="connectGanache()">Connect Ganache</button>
-          <span id="ganache-status" class="ganache-status offline">Ganache: Offline</span>
+          <span id="api-status" class="graphx-status online">API: Connecting...</span>
+          <button class="btn-primary" onclick="openAddProtocolModal()">+ Add Protocol</button>
+          <button class="btn-refresh" onclick="triggerSyncJob()">↻ Run Sync Job</button>
+          <a href="/api/v1/docs" target="_blank" rel="noopener" class="btn-refresh" style="text-decoration:none;display:inline-flex;align-items:center;">⚡ API Docs</a>
           <select id="refresh-interval" class="select-ctrl" onchange="setRefreshInterval(this.value)">
-            <option value="15">Refresh: 15s</option>
-            <option value="30" selected>Refresh: 30s</option>
-            <option value="60">Refresh: 60s</option>
+            <option value="15">Sync: 15s</option>
+            <option value="30" selected>Sync: 30s</option>
+            <option value="60">Sync: 60s</option>
           </select>
-          <button class="btn-refresh" onclick="fullRefresh()">↻ Refresh Now</button>
         </div>
       </header>
 
-      <!-- Metric cards -->
+      <!-- Key Decentralization Metrics Overview -->
       <section id="overview" class="section">
         <div class="metrics-row">
           <div class="metric-card" style="--accent:#378ADD">
-            <div class="mc-label">Avg CDI Score</div>
+            <div class="mc-label">Average CDI Score</div>
             <div class="mc-value" id="avg-cdi">—</div>
-            <div class="mc-badge" id="cdi-interp">—</div>
+            <div class="mc-badge" id="cdi-interp">Calculating...</div>
             <div class="mc-bar"><div class="mc-bar-fill" id="cdi-fill" style="background:#378ADD"></div></div>
           </div>
           <div class="metric-card" style="--accent:#E24B4A">
-            <div class="mc-label">Avg Gini Coefficient</div>
+            <div class="mc-label">Average Gini Coefficient</div>
             <div class="mc-value" id="avg-gini">—</div>
-            <div class="mc-badge danger">Ownership Concentration</div>
+            <div class="mc-badge danger">Token Concentration</div>
             <div class="mc-bar"><div class="mc-bar-fill" id="gini-fill" style="background:#E24B4A"></div></div>
           </div>
           <div class="metric-card" style="--accent:#1D9E75">
-            <div class="mc-label">Avg Entropy</div>
+            <div class="mc-label">Average Normalized Entropy</div>
             <div class="mc-value" id="avg-entropy">—</div>
-            <div class="mc-badge success">Distributed Usage</div>
+            <div class="mc-badge success">Usage Dispersion</div>
             <div class="mc-bar"><div class="mc-bar-fill" id="entropy-fill" style="background:#1D9E75"></div></div>
           </div>
           <div class="metric-card" style="--accent:#EF9F27">
-            <div class="mc-label">Avg HHI</div>
+            <div class="mc-label">Average Voting HHI</div>
             <div class="mc-value" id="avg-hhi">—</div>
-            <div class="mc-badge warning">Governance Conc.</div>
+            <div class="mc-badge warning">Governance Monopolization</div>
             <div class="mc-bar"><div class="mc-bar-fill" id="hhi-fill" style="background:#EF9F27"></div></div>
           </div>
         </div>
       </section>
 
-      <section class="section card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Ganache Node Telemetry</div>
-            <div class="card-sub">Live JSON-RPC values from local chain</div>
-          </div>
-        </div>
-        <div id="ganache-meta" class="ganache-meta-grid">
-          <div class="meta-item"><span class="meta-k">Current Block</span><span id="meta-block" class="meta-v">-</span></div>
-          <div class="meta-item"><span class="meta-k">Gas Price</span><span id="meta-gas-price" class="meta-v">-</span></div>
-          <div class="meta-item"><span class="meta-k">Gas Limit</span><span id="meta-gas-limit" class="meta-v">-</span></div>
-          <div class="meta-item"><span class="meta-k">Hardfork</span><span id="meta-hardfork" class="meta-v">-</span></div>
-          <div class="meta-item"><span class="meta-k">Network ID</span><span id="meta-network-id" class="meta-v">-</span></div>
-          <div class="meta-item"><span class="meta-k">RPC Server</span><span id="meta-rpc" class="meta-v">-</span></div>
-          <div class="meta-item"><span class="meta-k">Mining Status</span><span id="meta-mining" class="meta-v">-</span></div>
-        </div>
-      </section>
-
-      <section class="section card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Neural GraphX Value Feed</div>
-            <div class="card-sub">Connect endpoint and display latest GraphX value in real time</div>
-          </div>
-        </div>
-        <div class="graphx-config">
-          <label class="graphx-label" for="graphx-endpoint">Endpoint</label>
-          <input id="graphx-endpoint" class="graphx-input" type="text" value="http://127.0.0.1:8080/graphx/value" />
-          <label class="graphx-label" for="graphx-api-key">API Key (optional)</label>
-          <input id="graphx-api-key" class="graphx-input" type="text" placeholder="Bearer token if required" />
-        </div>
-        <div class="graphx-metrics">
-          <div class="graphx-metric-item">
-            <span class="graphx-k">GraphX Value</span>
-            <span id="graphx-value" class="graphx-v">-</span>
-          </div>
-          <div class="graphx-metric-item">
-            <span class="graphx-k">Source Timestamp</span>
-            <span id="graphx-timestamp" class="graphx-v">-</span>
-          </div>
-          <div class="graphx-metric-item">
-            <span class="graphx-k">Latency</span>
-            <span id="graphx-latency" class="graphx-v">-</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Formalization + Adaptive Weights -->
+      <!-- Dimension Breakdown and Adaptive Entropy Weights -->
       <section class="section grid2">
-
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Phase 1 — Dynamic Problem Formalization</div>
-              <div class="card-sub">Can decentralization be measured dynamically, structurally, and predictively?</div>
+              <div class="card-title">Four-Dimensional Decentralization Engine</div>
+              <div class="card-sub">Grounded components normalized in [0, 1] where 1.0 = maximum decentralization</div>
             </div>
           </div>
           <div class="formula-wrap">
             <div class="formula-line">CDI(t) = Σ w<sub>i</sub>(t) · F<sub>i</sub>(t)</div>
-            <div class="formula-meta">F<sub>i</sub>(t): decentralization dimension scores · w<sub>i</sub>(t): adaptive weights · t: rolling time window</div>
+            <div class="formula-meta">F<sub>eco</sub>, F<sub>gov</sub>, F<sub>struct</sub>, F<sub>dev</sub> with ∑ w<sub>i</sub> = 1.0</div>
           </div>
           <div id="dimension-score-grid" class="dim-grid"></div>
         </div>
@@ -177,43 +137,130 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Phase 4 — Adaptive Weight Learning</div>
-              <div class="card-sub">Entropy-weight method with rolling recalibration</div>
+              <div class="card-title">Dynamic Shannon Entropy Weighting</div>
+              <div class="card-sub">Adaptive weighting based on information divergence (EWM)</div>
             </div>
           </div>
           <div id="weight-list" class="weight-list"></div>
           <div class="model-note">
-            Alternative engines supported in design: PCA factor loading and supervised event-prediction weighting.
+            Weights adapt to cross-protocol variance. Higher informational entropy yields calibrated sensitivity.
           </div>
         </div>
-
       </section>
 
-      <!-- CDI Time Series -->
+      <!-- CDI Time-Series Evolution Chart -->
       <section class="section card">
         <div class="card-header">
           <div>
-            <div class="card-title">CDI(t) — Time Evolution</div>
-            <div class="card-sub">Rolling 30-day computation displayed across a 90-day horizon</div>
+            <div class="card-title">CDI(t) — Historical Evolution & Regime Shifts</div>
+            <div class="card-sub">Rolling time-series snapshots computed from verified on-chain & governance events</div>
           </div>
           <div class="proto-toggles" id="proto-btns"></div>
         </div>
         <div class="chart-wrap">
-          <canvas id="cdiChart" role="img" aria-label="CDI time series for 5 DeFi protocols over 90 days">
-            CDI time evolution for Uniswap, Aave, SushiSwap, Curve, and Compound.
+          <canvas id="cdiChart" role="img" aria-label="CDI historical time series">
+            CDI time evolution across monitored Web3 protocols.
           </canvas>
         </div>
         <div class="chart-legend" id="chart-legend"></div>
       </section>
 
-      <!-- Temporal + Risk -->
-      <section class="section grid2">
+      <!-- Protocol Management Table (Full CRUD) -->
+      <section id="protocols" class="section card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Monitored Protocols & Active CRUD</div>
+            <div class="card-sub">Create, inspect, recalculate, and remove protocol monitoring configurations</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <input id="proto-search" type="text" class="form-input" placeholder="Search protocol..." style="width:180px;padding:6px 10px;" oninput="filterProtocols()">
+            <select id="proto-category" class="select-ctrl" onchange="filterProtocols()">
+              <option value="">All Categories</option>
+              <option value="DEX">DEX</option>
+              <option value="Lending">Lending</option>
+              <option value="AMM">AMM</option>
+              <option value="CDP">CDP</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="proto-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Protocol</th>
+                <th>Category</th>
+                <th>CDI Score</th>
+                <th>Gini</th>
+                <th>Voting HHI</th>
+                <th>Risk Level</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="proto-rows"></tbody>
+          </table>
+        </div>
+      </section>
 
+      <!-- Sensitivity Analysis Lab -->
+      <section id="sensitivity" class="section card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Decentralization Sensitivity Lab</div>
+            <div class="card-sub">Simulate custom weight profiles and measure CDI sensitivity under alternative governance priorities</div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div>
+            <div class="form-group">
+              <label class="form-label" for="sens-protocol">Target Protocol</label>
+              <select id="sens-protocol" class="form-select"></select>
+            </div>
+            <div class="slider-group">
+              <div class="slider-header">
+                <span>Economic Weight (w_eco)</span>
+                <span id="val-w-eco">25%</span>
+              </div>
+              <input type="range" id="slider-w-eco" class="slider-ctrl" min="0" max="100" value="25" oninput="updateSliders()">
+            </div>
+            <div class="slider-group">
+              <div class="slider-header">
+                <span>Governance Weight (w_gov)</span>
+                <span id="val-w-gov">25%</span>
+              </div>
+              <input type="range" id="slider-w-gov" class="slider-ctrl" min="0" max="100" value="25" oninput="updateSliders()">
+            </div>
+            <div class="slider-group">
+              <div class="slider-header">
+                <span>Structural Weight (w_struct)</span>
+                <span id="val-w-struct">25%</span>
+              </div>
+              <input type="range" id="slider-w-struct" class="slider-ctrl" min="0" max="100" value="25" oninput="updateSliders()">
+            </div>
+            <div class="slider-group">
+              <div class="slider-header">
+                <span>Development Weight (w_dev)</span>
+                <span id="val-w-dev">25%</span>
+              </div>
+              <input type="range" id="slider-w-dev" class="slider-ctrl" min="0" max="100" value="25" oninput="updateSliders()">
+            </div>
+            <button class="btn-primary" onclick="runSensitivityAnalysis()">Run Sensitivity Model</button>
+          </div>
+          <div id="sensitivity-results" style="background:var(--bg3);border-radius:var(--radius-sm);padding:16px;">
+            <div style="font-weight:600;margin-bottom:8px;">Scenario Analysis Output</div>
+            <p style="color:var(--text2);font-size:12px;margin-bottom:12px;">Select a protocol and adjust weights to evaluate baseline deviation.</p>
+            <div id="sens-output-content" style="color:var(--text3);font-size:12px;">No scenario executed yet.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Drift Alerts & Risk Forecasting -->
+      <section id="alerts" class="section grid2">
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Phase 5 — Temporal Modeling</div>
-              <div class="card-sub">Volatility, change-points, and structural breaks</div>
+              <div class="card-title">Temporal Signals & Change-Point Detection</div>
+              <div class="card-sub">CUSUM algorithm and statistical variance monitoring</div>
             </div>
           </div>
           <div id="temporal-signals" class="signal-list"></div>
@@ -222,23 +269,22 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Phase 6 — Risk Forecasting Layer</div>
-              <div class="card-sub">Probability of centralization risk, governance capture, and cartel formation</div>
+              <div class="card-title">Decentralization Drift Alerts</div>
+              <div class="card-sub">Automated alerts for sustained decentralization decay</div>
             </div>
+            <button class="btn-action-sm" onclick="openAddAlertModal()">+ Rule</button>
           </div>
-          <div id="risk-forecast" class="risk-forecast-list"></div>
+          <div id="drift-alerts" class="drift-alert-list"></div>
         </div>
-
       </section>
 
-      <!-- Governance + Structural outputs -->
+      <!-- Governance Heatmap & Centrality -->
       <section class="section grid2">
-
         <div class="card">
           <div class="card-header">
             <div>
               <div class="card-title">Governance Concentration Heatmap</div>
-              <div class="card-sub">Higher intensity indicates stronger concentration risk</div>
+              <div class="card-sub">Higher intensity indicates acute voting power concentration</div>
             </div>
           </div>
           <div id="gov-heatmap" class="gov-heatmap"></div>
@@ -247,75 +293,35 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Network Centrality Distribution Plot</div>
-              <div class="card-sub">Top-holder centrality share over percentile bands</div>
+              <div class="card-title">Network Centrality Percentile Distribution</div>
+              <div class="card-sub">Cumulative stake/voting share across address percentiles</div>
             </div>
           </div>
           <div class="chart-wrap" style="height:240px">
-            <canvas id="centralityChart" role="img" aria-label="Network centrality distribution across protocols"></canvas>
+            <canvas id="centralityChart" role="img" aria-label="Network centrality curve"></canvas>
           </div>
         </div>
-
       </section>
 
-      <!-- Drift alerts -->
-      <section class="section card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Decentralization Drift Alerts</div>
-            <div class="card-sub">Alerts triggered by sustained CDI decline and temporal instability</div>
-          </div>
-        </div>
-        <div id="drift-alerts" class="drift-alert-list"></div>
-      </section>
-
-      <!-- Protocol table + Prices -->
-      <section class="section grid2">
-
-        <div id="protocols" class="card">
+      <!-- Token Feeds and Paradox Section -->
+      <section id="prices" class="section grid2">
+        <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Protocol Rankings</div>
-              <div class="card-sub">Sorted by CDI score</div>
-            </div>
-          </div>
-          <table class="proto-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Protocol</th>
-                <th>CDI</th>
-                <th>Gini</th>
-                <th>Entropy</th>
-                <th>Risk</th>
-              </tr>
-            </thead>
-            <tbody id="proto-rows"></tbody>
-          </table>
-        </div>
-
-        <div id="prices" class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Live Token Prices</div>
-              <div class="card-sub">Updates every 3 seconds</div>
+              <div class="card-title">Governance Token Value Feeds</div>
+              <div class="card-sub">Real-time market reference</div>
             </div>
           </div>
           <div id="price-list"></div>
         </div>
 
-      </section>
-
-      <!-- Paradox + Entropy bars -->
-      <section id="paradox" class="section grid2">
-
-        <div class="card">
+        <div id="paradox" class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Decentralization Paradox</div>
-              <div class="card-sub">Operational vs Governance gap</div>
+              <div class="card-title">The Decentralization Paradox</div>
+              <div class="card-sub">Operational usage vs Governance control divergence</div>
             </div>
-            <span class="info-badge" title="High operational entropy but low governance decentralization reveals the paradox.">ℹ</span>
+            <span class="info-badge" title="High operational entropy with concentrated governance reveals the paradox.">ℹ</span>
           </div>
           <div id="paradox-list"></div>
           <div class="paradox-legend">
@@ -323,68 +329,135 @@
             <span class="pl-dot" style="background:#E24B4A"></span> Governance
           </div>
         </div>
-
-        <div class="card">
-          <div class="card-title">Dimension Breakdown</div>
-          <div class="card-sub" style="margin-bottom:12px">Normalized component scores per protocol</div>
-          <div class="chart-wrap" style="height:220px">
-            <canvas id="radarChart" role="img" aria-label="Radar chart of CDI dimensions per protocol">
-              Radar chart showing Gini, HHI, and Entropy normalized scores per protocol.
-            </canvas>
-          </div>
-        </div>
-
       </section>
 
-      <!-- Data and architecture -->
-      <section class="section grid2">
-
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Phase 2 — Data Infrastructure</div>
-              <div class="card-sub">On-chain, governance, transaction graph, and development inputs</div>
-            </div>
-          </div>
-          <div class="source-grid">
-            <div class="source-item">
-              <div class="source-title">On-Chain Data</div>
-              <div class="source-text">Token balances, voting logs, delegation links, transaction history, LP participation</div>
-            </div>
-            <div class="source-item">
-              <div class="source-title">Governance Data</div>
-              <div class="source-text">Proposal participation, vote weights, direction correlation, delegation network</div>
-            </div>
-            <div class="source-item">
-              <div class="source-title">Transaction Graph Data</div>
-              <div class="source-text">Nodes: addresses · Edges: transfers and governance interactions</div>
-            </div>
-            <div class="source-item">
-              <div class="source-title">Development Data</div>
-              <div class="source-text">Contributor distribution, commit frequency, bus factor</div>
-            </div>
+      <!-- Radar Dimension Breakdown -->
+      <section class="section card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Multi-Dimensional Comparative Radar</div>
+            <div class="card-sub">Economic, Governance, Structural, and Development profiles</div>
           </div>
         </div>
-
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Phase 7 — System Architecture</div>
-              <div class="card-sub">End-to-end operational pipeline</div>
-            </div>
-          </div>
-          <div id="pipeline-flow" class="pipeline-flow"></div>
+        <div class="chart-wrap" style="height:260px">
+          <canvas id="radarChart" role="img" aria-label="Comparative Radar Chart of CDI Dimensions"></canvas>
         </div>
-
       </section>
 
       <!-- Footer -->
       <footer class="dash-footer">
-        Dynamic CDI Research Stack · Data Sources: Ethereum Archive Node, Etherscan API, Dune, GitHub · Storage: PostgreSQL / BigQuery / Neo4j
+        Web3 Composite Decentralization Index (CDI) Framework · Production Edition v1.0.0 · Data Sources: Ethereum Archive Node, Etherscan API, Snapshot GraphQL, Dune Analytics · Fully REST Compliant &amp; Open Source
       </footer>
 
     </main>
   </div>
+
+  <!-- Modal: Add Protocol -->
+  <div id="addProtocolModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">Register New Protocol</div>
+        <button class="modal-close" onclick="closeAddProtocolModal()">&times;</button>
+      </div>
+      <form id="add-protocol-form" onsubmit="submitAddProtocol(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="p-slug">Slug (Unique ID)</label>
+            <input type="text" id="p-slug" class="form-input" required placeholder="e.g. balancerv2" pattern="^[a-z0-9_-]+$">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="p-name">Protocol Name</label>
+            <input type="text" id="p-name" class="form-input" required placeholder="e.g. Balancer v2">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="p-symbol">Token Symbol</label>
+            <input type="text" id="p-symbol" class="form-input" required placeholder="e.g. BAL">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="p-category">Category</label>
+            <select id="p-category" class="form-select">
+              <option value="DEX">DEX</option>
+              <option value="Lending">Lending</option>
+              <option value="AMM">AMM</option>
+              <option value="CDP">CDP</option>
+              <option value="L1">Layer 1</option>
+              <option value="L2">Layer 2</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="p-contract">Token Contract Address</label>
+          <input type="text" id="p-contract" class="form-input" placeholder="0x...">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="p-desc">Description</label>
+          <textarea id="p-desc" class="form-textarea" rows="2" placeholder="Brief protocol summary..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeAddProtocolModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Register Protocol</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Create Alert Rule -->
+  <div id="addAlertModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">Configure Alert Rule</div>
+        <button class="modal-close" onclick="closeAddAlertModal()">&times;</button>
+      </div>
+      <form id="add-alert-form" onsubmit="submitAddAlert(event)">
+        <div class="form-group">
+          <label class="form-label" for="a-name">Rule Name</label>
+          <input type="text" id="a-name" class="form-input" required placeholder="e.g. Extreme Whale Alert">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="a-metric">Metric</label>
+            <select id="a-metric" class="form-select">
+              <option value="composite_cdi">Composite CDI</option>
+              <option value="gini_coefficient">Gini Coefficient</option>
+              <option value="hhi_points">Voting HHI</option>
+              <option value="centralization_risk">Centralization Risk</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="a-cond">Condition</label>
+            <select id="a-cond" class="form-select">
+              <option value="lt">Less Than (&lt;)</option>
+              <option value="gt">Greater Than (&gt;)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="a-thresh">Threshold Value</label>
+            <input type="number" id="a-thresh" class="form-input" required step="0.01" value="0.40">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="a-sev">Severity</label>
+            <select id="a-sev" class="form-select">
+              <option value="info">Info</option>
+              <option value="watch">Watch</option>
+              <option value="warning">Warning</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeAddAlertModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save Alert Rule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>

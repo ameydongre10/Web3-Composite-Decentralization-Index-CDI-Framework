@@ -1,21 +1,26 @@
 'use strict';
 
-// ── State ──────────────────────────────────────────────────────────────────
-const PROTOCOL_META = [
-  { id:'uniswap', name:'Uniswap v3', tag:'DEX',    color:'#378ADD', dash:[]        },
-  { id:'aave',    name:'Aave v3',    tag:'Lending', color:'#1D9E75', dash:[6,3]     },
-  { id:'sushi',   name:'SushiSwap',  tag:'DEX',     color:'#EF9F27', dash:[3,3]     },
-  { id:'curve',   name:'Curve',      tag:'AMM',     color:'#D85A30', dash:[8,4]     },
-  { id:'compound',name:'Compound',   tag:'Lending', color:'#7F77DD', dash:[5,2]     },
-];
+// ── State & API Configuration ───────────────────────────────────────────────
+const API_BASE = window.location.origin.includes('8000') || window.location.port === '8000'
+  ? '/api/v1'
+  : 'http://127.0.0.1:8000/api/v1';
 
-const BASE_DATA = {
-  uniswap:  { gini:0.22, hhi:2150, entropy:6.42, delegationCent:0.43, blocCluster:0.41, structural:0.62, development:0.58 },
-  aave:     { gini:0.25, hhi:2300, entropy:6.20, delegationCent:0.48, blocCluster:0.44, structural:0.59, development:0.63 },
-  sushi:    { gini:0.20, hhi:1950, entropy:6.55, delegationCent:0.37, blocCluster:0.35, structural:0.64, development:0.52 },
-  curve:    { gini:0.18, hhi:1800, entropy:6.70, delegationCent:0.34, blocCluster:0.33, structural:0.66, development:0.50 },
-  compound: { gini:0.24, hhi:2200, entropy:6.30, delegationCent:0.45, blocCluster:0.42, structural:0.57, development:0.56 },
-};
+const ADMIN_API_KEY = 'cdi-admin-key-2026';
+
+let protocolsList = [];
+let protoData = [];
+let dynamicWeights = { economic: 0.25, governance: 0.25, structural: 0.25, development: 0.25 };
+let cdiSeries = {};
+let visible = {};
+let cdiChart = null;
+let radarChart = null;
+let centralityChart = null;
+
+let refreshInterval = 30;
+let countdown = 30;
+let countdownTimer = null;
+let priceTimer = null;
+let backendConnected = false;
 
 const DIMENSIONS = [
   { key: 'economic', label: 'Economic Decentralization', color: '#378ADD' },
@@ -24,563 +29,210 @@ const DIMENSIONS = [
   { key: 'development', label: 'Development Decentralization', color: '#D85A30' },
 ];
 
-const PIPELINE_STEPS = [
-  'Data Ingestion',
-  'Feature Engineering',
-  'Graph Construction',
-  'Metric Computation',
-  'Weight Learning Engine',
-  'Temporal Modeling',
-  'Risk Prediction',
-  'Dashboard / API',
-];
-
 const TOKEN_META = [
-  { sym:'UNI',  name:'Uniswap',   base:7.82,  color:'#378ADD', bg:'#0d2440', fg:'#5aadff' },
-  { sym:'AAVE', name:'Aave',      base:88.40, color:'#1D9E75', bg:'#0d2b22', fg:'#3dd6a3' },
-  { sym:'SUSHI',name:'SushiSwap', base:1.12,  color:'#EF9F27', bg:'#2b200a', fg:'#f5b94d' },
-  { sym:'CRV',  name:'Curve',     base:0.34,  color:'#D85A30', bg:'#2b150a', fg:'#f58a60' },
-  { sym:'COMP', name:'Compound',  base:44.10, color:'#7F77DD', bg:'#1e1b3a', fg:'#aaa4f5' },
+  { sym: 'UNI', name: 'Uniswap', base: 7.82, color: '#378ADD', bg: '#0d2440', fg: '#5aadff' },
+  { sym: 'AAVE', name: 'Aave', base: 88.40, color: '#1D9E75', bg: '#0d2b22', fg: '#3dd6a3' },
+  { sym: 'SUSHI', name: 'SushiSwap', base: 1.12, color: '#EF9F27', bg: '#2b200a', fg: '#f5b94d' },
+  { sym: 'CRV', name: 'Curve', base: 0.34, color: '#D85A30', bg: '#2b150a', fg: '#f58a60' },
+  { sym: 'COMP', name: 'Compound', base: 44.10, color: '#7F77DD', bg: '#1e1b3a', fg: '#aaa4f5' },
 ];
-
-let protoData = PROTOCOL_META.map(p => ({
-  ...p,
-  ...BASE_DATA[p.id],
-  scores: { economic: 0, governance: 0, structural: 0, development: 0 },
-  cdi: 0,
-}));
-
-let dynamicWeights = { economic: 0.25, governance: 0.25, structural: 0.25, development: 0.25 };
 
 let tokenPrices = TOKEN_META.map(t => ({
   ...t,
   price: t.base,
   prevPrice: t.base,
-  hist: Array.from({length:24}, () => t.base * (1 + (Math.random()-.5)*.04)),
+  hist: Array.from({ length: 24 }, () => t.base * (1 + (Math.random() - 0.5) * 0.04)),
 }));
 
-let visible = Object.fromEntries(PROTOCOL_META.map(p => [p.id, true]));
-let cdiChart = null;
-let radarChart = null;
-let centralityChart = null;
-let cdiSeries = {};
-let refreshInterval = 30;
-let countdown = 30;
-let countdownTimer = null;
-let priceTimer = null;
-let ganacheProvider = null;
-let ganacheConnected = false;
-let latestGanacheSample = null;
-let latestGanacheMeta = null;
-let graphXPollingTimer = null;
-
-const GANACHE_RPC_URLS = [
-  'http://127.0.0.1:7545',
-  'http://127.0.0.1:8545',
-];
-
 // ── Helpers ─────────────────────────────────────────────────────────────────
-function jitter(v, pct = 0.018) {
-  return parseFloat((v + (Math.random() - 0.5) * v * pct * 2).toFixed(4));
+function fmt(n, dec = 3) {
+  if (n == null || isNaN(n)) return '—';
+  return parseFloat(n).toFixed(dec);
 }
 
 function clamp(v, min = 0, max = 1) {
   return Math.max(min, Math.min(max, v));
 }
 
-function sigmoid(x) {
-  return 1 / (1 + Math.exp(-x));
+function riskLabel(score) {
+  const s = parseFloat(score);
+  if (s > 0.60) return ['High Risk', 'risk-high'];
+  if (s > 0.40) return ['Moderate', 'risk-mod'];
+  return ['Low Risk', 'risk-low'];
 }
 
-function mean(arr) {
-  return arr.reduce((s, x) => s + x, 0) / arr.length;
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
 }
 
-function stdev(arr) {
-  if (arr.length < 2) return 0;
-  const m = mean(arr);
-  return Math.sqrt(arr.reduce((s, x) => s + (x - m) ** 2, 0) / (arr.length - 1));
-}
-
-function genSeries(baseVal, n = 90) {
-  let v = baseVal;
-  return Array.from({length: n}, () => {
-    v = Math.max(0.35, Math.min(0.55, v + (Math.random() - 0.5) * 0.007));
-    return parseFloat(v.toFixed(4));
-  });
-}
-
-function dateLabels(n = 90) {
-  return Array.from({length: n}, (_, i) => {
-    const d = new Date(2024, 0, 1);
-    d.setDate(d.getDate() + i);
-    return i % 14 === 0
-      ? d.toLocaleDateString('en-US', {month:'short', day:'numeric'})
-      : '';
-  });
-}
-
-function riskLabel(cdi) {
-  if (cdi < 0.42) return ['High', 'risk-high'];
-  if (cdi < 0.52) return ['Mod', 'risk-mod'];
-  return ['Low', 'risk-low'];
-}
-
-function fmt(n, dec = 3) { return parseFloat(n).toFixed(dec); }
-
-function setGanacheStatus(connected, text) {
-  ganacheConnected = connected;
-  const el = document.getElementById('ganache-status');
-  if (!el) return;
-  el.textContent = text;
-  el.classList.toggle('online', connected);
-  el.classList.toggle('offline', !connected);
-}
-
-function setGraphXStatus(ok, text) {
-  const el = document.getElementById('graphx-status');
-  if (!el) return;
-  el.textContent = text;
-  el.classList.toggle('online', ok);
-  el.classList.toggle('offline', !ok);
-}
-
-function setGraphXValueDisplay(value, timestamp, latencyMs) {
-  const valueEl = document.getElementById('graphx-value');
-  const tsEl = document.getElementById('graphx-timestamp');
-  const latEl = document.getElementById('graphx-latency');
-  if (valueEl) valueEl.textContent = value;
-  if (tsEl) tsEl.textContent = timestamp || '-';
-  if (latEl) latEl.textContent = latencyMs != null ? `${latencyMs} ms` : '-';
-}
-
-function extractGraphXValue(payload) {
-  if (payload == null) return null;
-  if (typeof payload === 'number') return payload;
-  if (typeof payload === 'string' && payload.trim() !== '' && !Number.isNaN(Number(payload))) return Number(payload);
-
-  const candidateKeys = ['value', 'graphxValue', 'score', 'metric', 'data'];
-  for (const k of candidateKeys) {
-    const v = payload[k];
-    if (typeof v === 'number') return v;
-    if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) return Number(v);
-    if (v && typeof v === 'object' && typeof v.value === 'number') return v.value;
-  }
-
-  return null;
-}
-
-async function fetchGraphXValue() {
-  const endpointEl = document.getElementById('graphx-endpoint');
-  const keyEl = document.getElementById('graphx-api-key');
-  if (!endpointEl) return;
-
-  const endpoint = endpointEl.value.trim();
-  const apiKey = keyEl ? keyEl.value.trim() : '';
-  if (!endpoint) {
-    setGraphXStatus(false, 'GraphX: Missing endpoint');
-    return;
-  }
-
-  setGraphXStatus(false, 'GraphX: Fetching...');
-  const started = performance.now();
-
-  try {
-    const headers = { 'Accept': 'application/json' };
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-    const res = await fetch(endpoint, { method: 'GET', headers });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const payload = await res.json();
-    const value = extractGraphXValue(payload);
-    if (value == null) throw new Error('No numeric value in GraphX response');
-
-    const latency = Math.round(performance.now() - started);
-    const ts = payload.timestamp || payload.updatedAt || new Date().toISOString();
-    setGraphXValueDisplay(Number(value).toFixed(4), ts, latency);
-    setGraphXStatus(true, 'GraphX: Connected');
-  } catch (err) {
-    setGraphXStatus(false, `GraphX: ${String(err.message || 'Fetch failed')}`);
-    setGraphXValueDisplay('-', '-', null);
-  }
-}
-
-function setMetaValue(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value;
-}
-
-function renderGanacheMeta(meta) {
-  const m = meta || latestGanacheMeta;
-  if (!m) {
-    setMetaValue('meta-block', '-');
-    setMetaValue('meta-gas-price', '-');
-    setMetaValue('meta-gas-limit', '-');
-    setMetaValue('meta-hardfork', '-');
-    setMetaValue('meta-network-id', '-');
-    setMetaValue('meta-rpc', '-');
-    setMetaValue('meta-mining', '-');
-    return;
-  }
-
-  setMetaValue('meta-block', String(m.currentBlock));
-  setMetaValue('meta-gas-price', String(m.gasPrice));
-  setMetaValue('meta-gas-limit', String(m.gasLimit));
-  setMetaValue('meta-hardfork', m.hardfork || 'MERGE');
-  setMetaValue('meta-network-id', String(m.networkId));
-  setMetaValue('meta-rpc', m.rpcServer);
-  setMetaValue('meta-mining', m.mining ? 'AUTOMINING' : 'STOPPED');
-}
-
-async function tryGanacheProvider(url) {
-  const provider = new ethers.JsonRpcProvider(url, undefined, { staticNetwork: true });
-  const net = await provider.getNetwork();
-  if (!net || net.chainId <= 0n) throw new Error('No chain id');
-  return provider;
-}
-
-async function sampleGanacheData() {
-  if (!ganacheProvider) return null;
-
-  const blockNumber = await ganacheProvider.getBlockNumber();
-  const latestBlock = await ganacheProvider.getBlock(blockNumber, true);
-  const txCount = latestBlock && latestBlock.transactions ? latestBlock.transactions.length : 0;
-
-  const accounts = await ganacheProvider.listAccounts();
-  const balances = await Promise.all(accounts.slice(0, 10).map(a => ganacheProvider.getBalance(a.address || a)));
-  const balanceNums = balances.map(v => Number(ethers.formatEther(v)));
-  const totalBalance = balanceNums.reduce((s, v) => s + v, 0) || 1;
-  const topShare = balanceNums.sort((a, b) => b - a).slice(0, 3).reduce((s, v) => s + v, 0) / totalBalance;
-
-  return {
-    blockNumber,
-    txCount,
-    accountCount: accounts.length,
-    topShare: clamp(topShare, 0, 1),
+// ── API Communication ───────────────────────────────────────────────────────
+async function apiFetch(endpoint, options = {}) {
+  const headers = {
+    'Accept': 'application/json',
+    ...(options.headers || {}),
   };
-}
+  if (options.auth) {
+    headers['X-API-Key'] = ADMIN_API_KEY;
+  }
+  if (options.body && typeof options.body === 'object') {
+    headers['Content-Type'] = 'application/json';
+    options.body = JSON.stringify(options.body);
+  }
 
-async function fetchGanacheMeta(url) {
-  if (!ganacheProvider) return null;
-
-  const [
-    blockHex,
-    gasPriceHex,
-    mining,
-    networkId,
-    latestBlock,
-    clientVersion,
-  ] = await Promise.all([
-    ganacheProvider.send('eth_blockNumber', []),
-    ganacheProvider.send('eth_gasPrice', []),
-    ganacheProvider.send('eth_mining', []),
-    ganacheProvider.send('net_version', []),
-    ganacheProvider.send('eth_getBlockByNumber', ['latest', false]),
-    ganacheProvider.send('web3_clientVersion', []),
-  ]);
-
-  const currentBlock = parseInt(blockHex, 16);
-  const gasPrice = BigInt(gasPriceHex).toString();
-  const gasLimit = latestBlock && latestBlock.gasLimit ? parseInt(latestBlock.gasLimit, 16).toString() : '-';
-  const inferredHardfork = /merge|paris/i.test(String(clientVersion)) ? 'MERGE' : 'MERGE';
-
-  return {
-    currentBlock,
-    gasPrice,
-    gasLimit,
-    hardfork: inferredHardfork,
-    networkId,
-    rpcServer: String(url).toUpperCase(),
-    mining: Boolean(mining),
-  };
-}
-
-function applyGanacheSample(sample) {
-  if (!sample) return;
-  latestGanacheSample = sample;
-
-  // Map local chain concentration/activity into feature priors.
-  const txSignal = clamp(sample.txCount / 40, 0, 1);
-  const acctSignal = clamp(sample.accountCount / 20, 0, 1);
-  const concentration = sample.topShare;
-
-  protoData = protoData.map((p, i) => {
-    const offset = (i - 2) * 0.007;
-    return {
-      ...p,
-      gini: clamp(0.16 + 0.22 * concentration + 0.03 * (1 - acctSignal) + offset, 0.05, 0.9),
-      hhi: Math.round(clamp(1600 + concentration * 2800 + (1 - txSignal) * 450 + i * 25, 1200, 5000)),
-      entropy: clamp(5.8 + txSignal * 1.1 + acctSignal * 0.7 - concentration * 0.9 + offset, 3.2, 7.8),
-      delegationCent: clamp(0.25 + concentration * 0.5 + 0.06 * i),
-      blocCluster: clamp(0.24 + concentration * 0.52 + 0.03 * (4 - i)),
-      structural: clamp(0.52 + txSignal * 0.24 - concentration * 0.18 - 0.01 * i),
-      development: clamp(0.50 + acctSignal * 0.21 - concentration * 0.08 + 0.01 * i),
-    };
-  });
-}
-
-async function connectGanache() {
-  setGanacheStatus(false, 'Ganache: Connecting...');
-  renderGanacheMeta(null);
-
-  for (const url of GANACHE_RPC_URLS) {
+  const url = `${API_BASE}${endpoint}`;
+  const response = await fetch(url, { ...options, headers });
+  if (!response.ok) {
+    let errorDetail = `HTTP ${response.status}`;
     try {
-      ganacheProvider = await tryGanacheProvider(url);
-      const sample = await sampleGanacheData();
-      const meta = await fetchGanacheMeta(url);
-      applyGanacheSample(sample);
-      recomputeModelState();
-      latestGanacheMeta = meta;
-      renderGanacheMeta(meta);
-      fullRefresh();
-      setGanacheStatus(true, `Ganache: Connected (${url})`);
-      return;
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch (_) {}
+    throw new Error(errorDetail);
+  }
+  if (response.status === 204) return null;
+  return response.json();
+}
+
+async function checkBackendHealth() {
+  const statusEl = document.getElementById('api-status');
+  const indEl = document.getElementById('backend-indicator');
+  try {
+    const data = await apiFetch('/health');
+    backendConnected = true;
+    if (statusEl) {
+      statusEl.textContent = `API: Online v${data.version}`;
+      statusEl.className = 'graphx-status online';
+    }
+    if (indEl) indEl.textContent = 'Live REST Engine';
+    return true;
+  } catch (err) {
+    backendConnected = false;
+    if (statusEl) {
+      statusEl.textContent = 'API: Offline (Simulated Fallback)';
+      statusEl.className = 'graphx-status offline';
+    }
+    if (indEl) indEl.textContent = 'Fallback Cache';
+    return false;
+  }
+}
+
+// ── Data Ingestion & State Refresh ──────────────────────────────────────────
+async function fetchOverviewMetrics() {
+  try {
+    const overview = await apiFetch('/metrics/overview');
+    document.getElementById('avg-cdi').textContent = fmt(overview.avg_cdi);
+    document.getElementById('avg-gini').textContent = fmt(overview.avg_gini);
+    document.getElementById('avg-entropy').textContent = fmt(overview.avg_entropy, 2);
+    document.getElementById('avg-hhi').textContent = Math.round(overview.avg_hhi || 0).toLocaleString();
+    document.getElementById('cdi-interp').textContent = overview.interpretation || 'Calculated';
+
+    document.getElementById('cdi-fill').style.width = (clamp(overview.avg_cdi) * 100) + '%';
+    document.getElementById('gini-fill').style.width = (clamp(overview.avg_gini) * 100) + '%';
+    document.getElementById('entropy-fill').style.width = (clamp(overview.avg_entropy / 8.0) * 100) + '%';
+    document.getElementById('hhi-fill').style.width = (clamp(overview.avg_hhi / 10000.0) * 100) + '%';
+
+    protoData = overview.rankings || [];
+    renderProtoTable();
+    renderDimensionScoreGrid(overview.dimensions);
+    renderRadarChart();
+    renderParadox();
+    renderGovHeatmap();
+    renderCentralityChart();
+    updateSensitivityDropdown();
+  } catch (err) {
+    console.warn('Could not load overview metrics from API:', err.message);
+  }
+}
+
+async function fetchHistoricalSeries() {
+  if (!protoData || protoData.length === 0) return;
+  for (const p of protoData) {
+    try {
+      const data = await apiFetch(`/protocols/${p.id}/temporal-drift?lookback=60`);
+      cdiSeries[p.id] = data.history || [];
+      if (!(p.id in visible)) visible[p.id] = true;
     } catch (err) {
-      // Try next port.
+      // Fallback synthetic series if drift endpoint fails
+      cdiSeries[p.id] = Array.from({ length: 60 }, (_, i) => p.cdi + (Math.sin(i / 5) * 0.02));
+      if (!(p.id in visible)) visible[p.id] = true;
     }
   }
-
-  ganacheProvider = null;
-  latestGanacheSample = null;
-  latestGanacheMeta = null;
-  setGanacheStatus(false, 'Ganache: Offline (start node at 7545/8545)');
-  renderGanacheMeta(null);
+  updateCDIChart();
+  renderTemporalSignals();
+  renderDriftAlerts();
 }
 
-function computeDimensionScores(p) {
-  const wealthEntropy = clamp(p.entropy / 8);
-  const giniBalance = clamp(1 - p.gini);
-  const hhiBalance = clamp(1 - p.hhi / 10000);
-
-  const economic = clamp(
-    0.45 * giniBalance +
-    0.30 * wealthEntropy +
-    0.25 * hhiBalance
-  );
-
-  const governance = clamp(
-    0.45 * hhiBalance +
-    0.25 * wealthEntropy +
-    0.30 * (1 - p.delegationCent)
-  );
-
-  const structural = clamp(
-    0.55 * p.structural +
-    0.25 * (1 - p.blocCluster) +
-    0.20 * wealthEntropy
-  );
-
-  const development = clamp(
-    0.70 * p.development +
-    0.30 * (1 - p.gini)
-  );
-
-  return { economic, governance, structural, development };
-}
-
-function computeAdaptiveWeights(protocols) {
-  const n = protocols.length;
-  const k = 1 / Math.log(n);
-  const eps = 1e-9;
-  const diversities = {};
-
-  DIMENSIONS.forEach(d => {
-    const vals = protocols.map(p => clamp(p.scores[d.key], 0.0001, 0.9999));
-    const total = vals.reduce((s, v) => s + v, 0);
-    const probs = vals.map(v => v / total);
-    const entropy = -k * probs.reduce((s, p) => s + p * Math.log(p + eps), 0);
-    diversities[d.key] = Math.max(0.0001, 1 - entropy);
-  });
-
-  const sumD = Object.values(diversities).reduce((s, x) => s + x, 0);
-  const out = {};
-  DIMENSIONS.forEach(d => {
-    out[d.key] = diversities[d.key] / sumD;
-  });
-
-  return out;
-}
-
-function recomputeModelState() {
-  protoData = protoData.map(p => ({ ...p, scores: computeDimensionScores(p) }));
-  dynamicWeights = computeAdaptiveWeights(protoData);
-  protoData = protoData.map(p => {
-    const cdi = DIMENSIONS.reduce((s, d) => s + dynamicWeights[d.key] * p.scores[d.key], 0);
-    return { ...p, cdi: clamp(cdi, 0.30, 0.90) };
-  });
-}
-
-// ── Init time series ─────────────────────────────────────────────────────────
-recomputeModelState();
-PROTOCOL_META.forEach(p => {
-  const proto = protoData.find(x => x.id === p.id);
-  cdiSeries[p.id] = genSeries(proto ? proto.cdi : 0.45);
-});
-
-// ── Charts ──────────────────────────────────────────────────────────────────
-function buildCDIChart() {
-  const ctx = document.getElementById('cdiChart');
-  const datasets = PROTOCOL_META.map(p => ({
-    label: p.name,
-    data: cdiSeries[p.id],
-    borderColor: p.color,
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderDash: p.dash,
-    pointRadius: 0,
-    tension: 0.4,
-    hidden: !visible[p.id],
-  }));
-
-  cdiChart = new Chart(ctx, {
-    type: 'line',
-    data: { labels: dateLabels(), datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 400 },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          mode: 'index',
-          intersect: false,
-          backgroundColor: '#1a1d32',
-          borderColor: 'rgba(255,255,255,0.12)',
-          borderWidth: 1,
-          titleColor: '#9095b0',
-          bodyColor: '#e8eaf0',
-          padding: 10,
-          callbacks: {
-            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(3)}`
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: 'rgba(255,255,255,0.04)' },
-          ticks: { color: '#5a5f7a', font: {size:10}, maxRotation: 0 }
-        },
-        y: {
-          min: 0.32, max: 0.58,
-          grid: { color: 'rgba(255,255,255,0.04)' },
-          ticks: { color: '#5a5f7a', font: {size:10}, callback: v => v.toFixed(2) }
-        }
-      },
-      interaction: { mode:'index', intersect:false }
-    }
-  });
-}
-
-function buildRadarChart() {
-  const ctx = document.getElementById('radarChart');
-  const labels = ['Economic', 'Governance', 'Structural', 'Development'];
-
-  const datasets = protoData.map(p => ({
-    label: p.name,
-    data: [
-      parseFloat(p.scores.economic.toFixed(3)),
-      parseFloat(p.scores.governance.toFixed(3)),
-      parseFloat(p.scores.structural.toFixed(3)),
-      parseFloat(p.scores.development.toFixed(3)),
-    ],
-    borderColor: p.color,
-    backgroundColor: p.color + '22',
-    borderWidth: 1.5,
-    pointRadius: 3,
-    pointBackgroundColor: p.color,
-  }));
-
-  radarChart = new Chart(ctx, {
-    type: 'radar',
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 400 },
-      plugins: { legend: { display: false } },
-      scales: {
-        r: {
-          min: 0, max: 1,
-          grid: { color: 'rgba(255,255,255,0.07)' },
-          angleLines: { color: 'rgba(255,255,255,0.07)' },
-          pointLabels: { color: '#9095b0', font: {size: 11} },
-          ticks: { display: false, stepSize: 0.25 }
-        }
-      }
-    }
-  });
-}
-
-// ── Protocol toggles ─────────────────────────────────────────────────────────
-function buildProtoToggles() {
-  const wrap = document.getElementById('proto-btns');
-  const legend = document.getElementById('chart-legend');
-  wrap.innerHTML = PROTOCOL_META.map(p => `
-    <button
-      class="proto-btn active"
-      style="--pc:${p.color}"
-      data-id="${p.id}"
-      onclick="toggleProto('${p.id}', this)"
-    >${p.name}</button>
-  `).join('');
-
-  legend.innerHTML = PROTOCOL_META.map(p => `
-    <div class="legend-item">
-      <div class="legend-dot" style="background:${p.color}"></div>
-      <span>${p.name}</span>
-    </div>
-  `).join('');
-}
-
-function toggleProto(id, btn) {
-  visible[id] = !visible[id];
-  btn.classList.toggle('active', visible[id]);
-  cdiChart.data.datasets.forEach(ds => {
-    const meta = PROTOCOL_META.find(p => p.name === ds.label);
-    if (meta && meta.id === id) ds.hidden = !visible[id];
-  });
-  cdiChart.update();
-}
-
-// ── Render protocol table ────────────────────────────────────────────────────
+// ── Rendering Functions ─────────────────────────────────────────────────────
 function renderProtoTable() {
-  const sorted = [...protoData].sort((a, b) => b.cdi - a.cdi);
-  document.getElementById('proto-rows').innerHTML = sorted.map((p, i) => {
-    const [rl, rc] = riskLabel(p.cdi);
+  const tbody = document.getElementById('proto-rows');
+  if (!tbody) return;
+
+  const search = (document.getElementById('proto-search')?.value || '').toLowerCase();
+  const category = document.getElementById('proto-category')?.value || '';
+
+  const filtered = protoData.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(search) || p.symbol.toLowerCase().includes(search);
+    const matchCat = !category || p.category === category;
+    return matchSearch && matchCat;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text3)">No protocols found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((p, i) => {
+    const [rl, rc] = riskLabel(p.risk);
     const barW = Math.round(p.cdi * 100);
     return `
       <tr>
         <td><span class="rank-num">${i + 1}</span></td>
         <td>
           <div class="proto-name-cell">
-            <div class="name">${p.name}</div>
-            <div class="tag">${p.tag}</div>
+            <div class="name">${p.name} (${p.symbol})</div>
+            <div class="tag">${p.slug}</div>
           </div>
         </td>
+        <td><span class="tag" style="background:rgba(255,255,255,0.06)">${p.category || 'DEX'}</span></td>
         <td>
           <div class="cdi-cell">
             <div class="cdi-bar-bg">
-              <div class="cdi-bar-fg" style="width:${barW}%;background:${p.color}"></div>
+              <div class="cdi-bar-fg" style="width:${barW}%;background:${p.color || '#378ADD'}"></div>
             </div>
             <span class="cdi-num">${fmt(p.cdi)}</span>
           </div>
         </td>
         <td><span class="gini-num">${fmt(p.gini)}</span></td>
-        <td><span class="entropy-num">${fmt(p.entropy, 2)}</span></td>
+        <td><span class="entropy-num">${Math.round(p.hhi || 0).toLocaleString()}</span></td>
         <td><span class="risk-pill ${rc}">${rl}</span></td>
-      </tr>`;
+        <td>
+          <button class="btn-action-sm" onclick="recalculateProtocol(${p.id})">↻ Sync</button>
+          <button class="btn-danger-sm" onclick="deleteProtocol(${p.id}, '${p.name}')">✕</button>
+        </td>
+      </tr>
+    `;
   }).join('');
 }
 
-function renderDimensionScoreGrid() {
-  const avgByDim = {};
-  DIMENSIONS.forEach(d => {
-    avgByDim[d.key] = protoData.reduce((s, p) => s + p.scores[d.key], 0) / protoData.length;
-  });
+function filterProtocols() {
+  renderProtoTable();
+}
 
-  document.getElementById('dimension-score-grid').innerHTML = DIMENSIONS.map(d => {
-    const val = avgByDim[d.key];
+function renderDimensionScoreGrid(dimensions) {
+  const grid = document.getElementById('dimension-score-grid');
+  if (!grid || !dimensions) return;
+  grid.innerHTML = DIMENSIONS.map(d => {
+    const val = dimensions[d.key] || 0.5;
     return `
       <div class="dim-card">
         <div class="dim-head">
@@ -594,465 +246,505 @@ function renderDimensionScoreGrid() {
   }).join('');
 }
 
-function renderWeightList() {
-  document.getElementById('weight-list').innerHTML = DIMENSIONS.map(d => {
-    const w = dynamicWeights[d.key] || 0;
+function renderRadarChart() {
+  const ctx = document.getElementById('radarChart');
+  if (!ctx || protoData.length === 0) return;
+
+  const labels = ['Economic', 'Governance', 'Structural', 'Development'];
+  const datasets = protoData.map(p => ({
+    label: p.name,
+    data: [
+      parseFloat(p.economic || 0.5),
+      parseFloat(p.governance || 0.5),
+      parseFloat(p.structural || 0.5),
+      parseFloat(p.development || 0.5),
+    ],
+    borderColor: p.color || '#378ADD',
+    backgroundColor: (p.color || '#378ADD') + '22',
+    borderWidth: 1.5,
+    pointRadius: 3,
+  }));
+
+  if (radarChart) {
+    radarChart.data.datasets = datasets;
+    radarChart.update('none');
+  } else {
+    radarChart = new Chart(ctx, {
+      type: 'radar',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          r: {
+            min: 0,
+            max: 1,
+            grid: { color: 'rgba(255,255,255,0.07)' },
+            angleLines: { color: 'rgba(255,255,255,0.07)' },
+            pointLabels: { color: '#9095b0', font: { size: 11 } },
+            ticks: { display: false, stepSize: 0.25 },
+          }
+        }
+      }
+    });
+  }
+}
+
+function updateCDIChart() {
+  const ctx = document.getElementById('cdiChart');
+  if (!ctx) return;
+
+  const datasets = protoData.map(p => ({
+    label: p.name,
+    data: cdiSeries[p.id] || [],
+    borderColor: p.color || '#378ADD',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    pointRadius: 0,
+    tension: 0.35,
+    hidden: !visible[p.id],
+  }));
+
+  const labels = Array.from({ length: 60 }, (_, i) => `T-${60 - i}d`);
+
+  if (cdiChart) {
+    cdiChart.data.datasets = datasets;
+    cdiChart.data.labels = labels;
+    cdiChart.update('none');
+  } else {
+    cdiChart = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+            backgroundColor: '#1a1d32',
+            borderColor: 'rgba(255,255,255,0.12)',
+            borderWidth: 1,
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#5a5f7a', font: { size: 10 } }
+          },
+          y: {
+            min: 0.20,
+            max: 0.90,
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#5a5f7a', font: { size: 10 }, callback: v => v.toFixed(2) }
+          }
+        }
+      }
+    });
+  }
+
+  // Render toggles
+  const wrap = document.getElementById('proto-btns');
+  const legend = document.getElementById('chart-legend');
+  if (wrap) {
+    wrap.innerHTML = protoData.map(p => `
+      <button
+        class="proto-btn ${visible[p.id] ? 'active' : ''}"
+        style="--pc:${p.color || '#378ADD'}"
+        onclick="toggleProtoVisibility(${p.id}, this)"
+      >${p.name}</button>
+    `).join('');
+  }
+  if (legend) {
+    legend.innerHTML = protoData.map(p => `
+      <div class="legend-item">
+        <div class="legend-dot" style="background:${p.color || '#378ADD'}"></div>
+        <span>${p.name}</span>
+      </div>
+    `).join('');
+  }
+}
+
+function toggleProtoVisibility(id, btn) {
+  visible[id] = !visible[id];
+  btn.classList.toggle('active', visible[id]);
+  if (cdiChart) {
+    const ds = cdiChart.data.datasets.find(d => d.label === protoData.find(x => x.id === id)?.name);
+    if (ds) ds.hidden = !visible[id];
+    cdiChart.update();
+  }
+}
+
+function renderGovHeatmap() {
+  const container = document.getElementById('gov-heatmap');
+  if (!container || protoData.length === 0) return;
+
+  const headers = ['Protocol', 'Voting HHI', 'Centrality', 'Cartel Risk'];
+  const head = `<div class="heat-row heat-head">${headers.map(h => `<div class="heat-cell">${h}</div>`).join('')}</div>`;
+  const body = protoData.map(p => {
+    const hhiShare = clamp((p.hhi || 2000) / 10000);
+    const cent = clamp(1.0 - (p.governance || 0.5));
+    const cartel = clamp(p.risk || 0.3);
     return `
-      <div class="weight-row">
-        <div class="weight-label">
-          <span class="dim-dot" style="background:${d.color}"></span>
-          <span>${d.label}</span>
-        </div>
-        <div class="weight-value">w(t) = ${fmt(w)}</div>
-        <div class="weight-bar"><div class="weight-fill" style="width:${Math.round(w * 100)}%;background:${d.color}"></div></div>
+      <div class="heat-row">
+        <div class="heat-cell heat-proto">${p.name}</div>
+        <div class="heat-cell heat-value" style="background:rgba(226,75,74,${(0.15 + hhiShare * 0.7).toFixed(2)})">${fmt(hhiShare)}</div>
+        <div class="heat-cell heat-value" style="background:rgba(239,159,39,${(0.15 + cent * 0.7).toFixed(2)})">${fmt(cent)}</div>
+        <div class="heat-cell heat-value" style="background:rgba(226,75,74,${(0.15 + cartel * 0.7).toFixed(2)})">${fmt(cartel)}</div>
       </div>
     `;
   }).join('');
+  container.innerHTML = head + body;
 }
 
-function computeTemporalStats(series) {
-  const last30 = series.slice(-30);
-  const diffs = last30.slice(1).map((v, i) => v - last30[i]);
-  const volatility = stdev(diffs);
-  const changePoints = diffs.filter(d => Math.abs(d) > 0.012).length;
+function renderCentralityChart() {
+  const ctx = document.getElementById('centralityChart');
+  if (!ctx || protoData.length === 0) return;
 
-  const prev = series.slice(-20, -10);
-  const curr = series.slice(-10);
-  const breakMagnitude = Math.abs(mean(curr) - mean(prev));
-  const structuralBreak = breakMagnitude > 0.015;
+  const labels = ['P10', 'P20', 'P30', 'P40', 'P50', 'P60', 'P70', 'P80', 'P90', 'P100'];
+  const datasets = protoData.map(p => {
+    const gini = p.gini || 0.3;
+    const data = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(q => {
+      const n = q / 100;
+      return parseFloat((Math.pow(n, 1.0 - gini * 0.6) * (0.6 + gini * 0.4)).toFixed(3));
+    });
+    return {
+      label: p.name,
+      data,
+      borderColor: p.color || '#378ADD',
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      pointRadius: 2,
+    };
+  });
 
-  return { volatility, changePoints, structuralBreak, breakMagnitude };
+  if (centralityChart) {
+    centralityChart.data.datasets = datasets;
+    centralityChart.update('none');
+  } else {
+    centralityChart = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#5a5f7a', font: { size: 10 } } },
+          y: { min: 0, max: 1, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#5a5f7a', font: { size: 10 } } }
+        }
+      }
+    });
+  }
 }
 
 function renderTemporalSignals() {
-  const rows = PROTOCOL_META.map(meta => {
-    const s = cdiSeries[meta.id];
-    const t = computeTemporalStats(s);
-    return { ...meta, ...t };
-  });
-
-  document.getElementById('temporal-signals').innerHTML = rows.map(r => `
-    <div class="signal-row">
-      <div class="signal-name">${r.name}</div>
-      <div class="signal-metrics">
-        <span>Volatility ${fmt(r.volatility, 4)}</span>
-        <span>Change-points ${r.changePoints}</span>
-        <span class="${r.structuralBreak ? 'sig-break' : 'sig-stable'}">${r.structuralBreak ? 'Break detected' : 'Stable regime'}</span>
-      </div>
-    </div>
-  `).join('');
-}
-
-function governanceConcentrationMetrics(p) {
-  return {
-    votingHHI: clamp(p.hhi / 5000),
-    delegationCentrality: clamp(p.delegationCent),
-    blocClustering: clamp(p.blocCluster),
-  };
-}
-
-function heatColor(v) {
-  const x = clamp(v);
-  const alpha = 0.16 + x * 0.64;
-  return `rgba(226,75,74,${alpha.toFixed(3)})`;
-}
-
-function renderGovernanceHeatmap() {
-  const headers = ['Protocol', 'Voting HHI', 'Delegation Centrality', 'Bloc Clustering'];
-  const rows = protoData.map(p => {
-    const m = governanceConcentrationMetrics(p);
-    return { p, vals: [m.votingHHI, m.delegationCentrality, m.blocClustering] };
-  });
-
-  const head = `<div class="heat-row heat-head">${headers.map(h => `<div class="heat-cell">${h}</div>`).join('')}</div>`;
-  const body = rows.map(r => `
-    <div class="heat-row">
-      <div class="heat-cell heat-proto">${r.p.name}</div>
-      ${r.vals.map(v => `<div class="heat-cell heat-value" style="background:${heatColor(v)}">${fmt(v, 3)}</div>`).join('')}
-    </div>
-  `).join('');
-
-  document.getElementById('gov-heatmap').innerHTML = head + body;
-}
-
-function buildCentralityDistribution(p) {
-  const concentration = clamp(0.45 * p.delegationCent + 0.35 * p.blocCluster + 0.20 * (p.hhi / 5000));
-  const percentiles = [10,20,30,40,50,60,70,80,90,100];
-  return percentiles.map(q => {
-    const n = q / 100;
-    const skew = 0.65 + concentration;
-    const share = clamp((1 - Math.pow(1 - n, skew)) * (0.55 + concentration * 0.45));
-    return parseFloat(share.toFixed(3));
-  });
-}
-
-function buildCentralityChart() {
-  const ctx = document.getElementById('centralityChart');
-  const labels = ['P10','P20','P30','P40','P50','P60','P70','P80','P90','P100'];
-  const datasets = protoData.map(p => ({
-    label: p.name,
-    data: buildCentralityDistribution(p),
-    borderColor: p.color,
-    backgroundColor: 'transparent',
-    pointRadius: 1.8,
-    borderWidth: 1.6,
-    tension: 0.35,
-  }));
-
-  centralityChart = new Chart(ctx, {
-    type: 'line',
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 400 },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          mode: 'index',
-          intersect: false,
-          callbacks: { label: x => ` ${x.dataset.label}: ${x.parsed.y.toFixed(3)}` }
-        }
-      },
-      interaction: { mode: 'index', intersect: false },
-      scales: {
-        x: {
-          grid: { color: 'rgba(255,255,255,0.04)' },
-          ticks: { color: '#5a5f7a', font: { size: 10 } },
-          title: { display: true, text: 'Percentile Band', color: '#9095b0', font: { size: 10 } },
-        },
-        y: {
-          min: 0,
-          max: 1,
-          grid: { color: 'rgba(255,255,255,0.04)' },
-          ticks: { color: '#5a5f7a', font: { size: 10 } },
-          title: { display: true, text: 'Centrality Share', color: '#9095b0', font: { size: 10 } },
-        }
-      }
-    }
-  });
-}
-
-function updateCentralityChart() {
-  if (!centralityChart) return;
-  centralityChart.data.datasets.forEach(ds => {
-    const p = protoData.find(x => x.name === ds.label);
-    if (p) ds.data = buildCentralityDistribution(p);
-  });
-  centralityChart.update('none');
-}
-
-function computeDriftAlerts() {
-  return PROTOCOL_META.map(meta => {
-    const series = cdiSeries[meta.id];
-    const recent = series.slice(-30);
-    const older = series.slice(-60, -30);
-    const recentMean = mean(recent);
-    const olderMean = mean(older);
-    const drift = recentMean - olderMean;
-    const temporal = computeTemporalStats(series);
-    const sev = clamp(
-      0.55 * (0.5 - recentMean) +
-      0.30 * Math.max(0, -drift) * 10 +
-      0.15 * (temporal.volatility * 50)
-    );
-
-    let label = 'Info';
-    if (sev >= 0.70) label = 'Critical';
-    else if (sev >= 0.50) label = 'Warning';
-    else if (sev >= 0.35) label = 'Watch';
-
-    return {
-      ...meta,
-      recentMean,
-      drift,
-      sev,
-      label,
-      changePoints: temporal.changePoints,
-    };
-  }).sort((a, b) => b.sev - a.sev);
-}
-
-function renderDriftAlerts() {
-  const alerts = computeDriftAlerts();
-  document.getElementById('drift-alerts').innerHTML = alerts.map(a => `
-    <div class="drift-row">
-      <div class="drift-top">
-        <span class="drift-name">${a.name}</span>
-        <span class="drift-pill drift-${a.label.toLowerCase()}">${a.label}</span>
-      </div>
-      <div class="drift-meta">
-        <span>Current CDI mean ${fmt(a.recentMean)}</span>
-        <span>30d drift ${a.drift >= 0 ? '+' : ''}${fmt(a.drift, 4)}</span>
-        <span>Change-points ${a.changePoints}</span>
-      </div>
-      <div class="drift-bar"><div class="drift-fill" style="width:${Math.round(a.sev * 100)}%"></div></div>
-    </div>
-  `).join('');
-}
-
-function riskScores(p) {
-  const cRisk = sigmoid(
-    5.0 * (0.52 - p.cdi) +
-    2.1 * (p.gini - 0.2) +
-    1.2 * ((p.hhi - 1900) / 1000)
-  );
-
-  const gRisk = sigmoid(
-    4.2 * (0.50 - p.scores.governance) +
-    2.4 * p.delegationCent +
-    1.7 * p.blocCluster
-  );
-
-  const cartel = sigmoid(
-    3.7 * (0.52 - p.scores.structural) +
-    1.8 * p.blocCluster +
-    1.4 * (0.55 - p.scores.economic)
-  );
-
-  return {
-    centralization: clamp(cRisk),
-    governanceCapture: clamp(gRisk),
-    cartelFormation: clamp(cartel),
-  };
-}
-
-function renderRiskForecast() {
-  const sorted = [...protoData].sort((a, b) => riskScores(b).centralization - riskScores(a).centralization);
-  document.getElementById('risk-forecast').innerHTML = sorted.map(p => {
-    const r = riskScores(p);
-    const composite = clamp(0.40 * r.centralization + 0.35 * r.governanceCapture + 0.25 * r.cartelFormation);
+  const container = document.getElementById('temporal-signals');
+  if (!container || protoData.length === 0) return;
+  container.innerHTML = protoData.map(p => {
+    const series = cdiSeries[p.id] || [];
+    const diffs = series.slice(1).map((v, i) => v - series[i]);
+    const vol = diffs.length > 0 ? (diffs.reduce((s, x) => s + x * x, 0) / diffs.length) ** 0.5 : 0.005;
+    const isStable = vol < 0.015;
     return `
-      <div class="forecast-row">
-        <div class="forecast-top">
-          <span class="forecast-name">${p.name}</span>
-          <span class="forecast-cdi">CDI ${fmt(p.cdi)}</span>
+      <div class="signal-row">
+        <div class="signal-name">${p.name}</div>
+        <div class="signal-metrics">
+          <span>Volatility ${vol.toFixed(4)}</span>
+          <span class="${isStable ? 'sig-stable' : 'sig-break'}">${isStable ? 'Regime Stable' : 'Shift Detected'}</span>
         </div>
-        <div class="forecast-metric strong">
-          <span>Risk score (0-1)</span>
-          <span>${fmt(composite, 3)}</span>
-        </div>
-        <div class="forecast-bar"><div class="forecast-fill neutral" style="width:${Math.round(composite * 100)}%"></div></div>
-        <div class="forecast-metric">
-          <span>Centralization risk</span>
-          <span>${Math.round(r.centralization * 100)}%</span>
-        </div>
-        <div class="forecast-bar"><div class="forecast-fill danger" style="width:${Math.round(r.centralization * 100)}%"></div></div>
-        <div class="forecast-metric">
-          <span>Governance capture</span>
-          <span>${Math.round(r.governanceCapture * 100)}%</span>
-        </div>
-        <div class="forecast-bar"><div class="forecast-fill warning" style="width:${Math.round(r.governanceCapture * 100)}%"></div></div>
-        <div class="forecast-metric">
-          <span>Cartel formation</span>
-          <span>${Math.round(r.cartelFormation * 100)}%</span>
-        </div>
-        <div class="forecast-bar"><div class="forecast-fill accent" style="width:${Math.round(r.cartelFormation * 100)}%"></div></div>
       </div>
     `;
   }).join('');
 }
 
-function renderPipelineFlow() {
-  document.getElementById('pipeline-flow').innerHTML = PIPELINE_STEPS.map((step, i) => `
-    <div class="pipe-step-wrap">
-      <div class="pipe-step">
-        <span class="pipe-index">${i + 1}</span>
-        <span>${step}</span>
+async function renderDriftAlerts() {
+  const container = document.getElementById('drift-alerts');
+  if (!container) return;
+  try {
+    const res = await apiFetch('/alerts/incidents?page_size=5');
+    const incidents = res.items || [];
+    if (incidents.length === 0) {
+      container.innerHTML = `<div style="color:var(--text3);padding:12px;font-size:12px;">No active alert incidents triggered. System normal.</div>`;
+      return;
+    }
+    container.innerHTML = incidents.map(inc => `
+      <div class="drift-row">
+        <div class="drift-top">
+          <span class="drift-name">${inc.message}</span>
+          <span class="drift-pill drift-${inc.severity}">${inc.severity.toUpperCase()}</span>
+        </div>
+        <div class="drift-meta">
+          <span>Triggered: ${new Date(inc.triggered_at).toLocaleTimeString()}</span>
+          <span>Metric: ${inc.metric_value.toFixed(4)}</span>
+        </div>
       </div>
-      ${i < PIPELINE_STEPS.length - 1 ? '<div class="pipe-arrow">↓</div>' : ''}
-    </div>
-  `).join('');
+    `).join('');
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--text3);padding:12px;font-size:12px;">Alert system ready. No active incidents.</div>`;
+  }
 }
 
-// ── Render prices ───────────────────────────────────────────────────────────
-function buildSparkPath(hist) {
-  const mn = Math.min(...hist), mx = Math.max(...hist), rng = mx - mn || 0.001;
-  return hist.map((v, i) => {
-    const x = (i / (hist.length - 1)) * 86 + 1;
-    const y = 28 - ((v - mn) / rng) * 24;
-    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
-  }).join(' ');
+function renderParadox() {
+  const container = document.getElementById('paradox-list');
+  if (!container || protoData.length === 0) return;
+  container.innerHTML = protoData.map(p => {
+    const ops = Math.round(clamp((p.entropy || 6.0) / 8.0) * 100);
+    const gov = Math.round(clamp(p.gini || 0.25) * 100);
+    const gap = ops - gov;
+    const gapColor = gap > 40 ? '#E24B4A' : gap > 20 ? '#EF9F27' : '#1D9E75';
+    return `
+      <div class="paradox-item">
+        <div class="paradox-meta">
+          <span class="paradox-proto">${p.name}</span>
+          <span class="paradox-gap" style="color:${gapColor}">Divergence Gap ${gap}pt</span>
+        </div>
+        <div class="dual-bar">
+          <div class="dual-ops" style="width:${ops}%;background:${p.color || '#378ADD'}"></div>
+          <div class="dual-gov" style="width:${gov}%"></div>
+        </div>
+        <div class="dual-labels">
+          <span>Operational Usage ${ops}%</span>
+          <span>Governance Conc. ${gov}%</span>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function renderPrices() {
-  document.getElementById('price-list').innerHTML = tokenPrices.map(t => {
+  const container = document.getElementById('price-list');
+  if (!container) return;
+  container.innerHTML = tokenPrices.map(t => {
     const chg = ((t.price - t.base) / t.base * 100).toFixed(2);
     const isUp = parseFloat(chg) >= 0;
-    const spark = buildSparkPath(t.hist);
-    const fmtPrice = t.price < 1
-      ? t.price.toFixed(4)
-      : t.price < 10
-        ? t.price.toFixed(3)
-        : t.price.toFixed(2);
-
     return `
       <div class="price-row">
         <div class="price-token">
-          <div class="token-icon" style="background:${t.bg};color:${t.fg}">${t.sym.slice(0,2)}</div>
+          <div class="token-icon" style="background:${t.bg};color:${t.fg}">${t.sym.slice(0, 2)}</div>
           <div>
             <div class="tok-name">${t.sym}</div>
             <div class="tok-sub">${t.name}</div>
           </div>
         </div>
-        <svg class="mini-spark" viewBox="0 0 88 32" preserveAspectRatio="none">
-          <path d="${spark}" fill="none" stroke="${t.color}" stroke-width="1.5"
-            stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
         <div class="price-right">
-          <div class="price-usd">$${fmtPrice}</div>
+          <div class="price-usd">$${t.price.toFixed(2)}</div>
           <div class="price-chg ${isUp ? 'up' : 'down'}">${isUp ? '▲' : '▼'} ${Math.abs(chg)}%</div>
         </div>
-      </div>`;
+      </div>
+    `;
   }).join('');
 }
 
-// ── Render paradox ───────────────────────────────────────────────────────────
-function renderParadox() {
-  document.getElementById('paradox-list').innerHTML = protoData.map(p => {
-    const ops  = Math.round((p.entropy / 8) * 100);
-    const gov  = Math.round(p.gini * 100);
-    const gap  = ops - gov;
-    const gapColor = gap > 40 ? '#E24B4A' : gap > 30 ? '#EF9F27' : '#1D9E75';
-    return `
-      <div class="paradox-item">
-        <div class="paradox-meta">
-          <span class="paradox-proto">${p.name}</span>
-          <span class="paradox-gap" style="color:${gapColor}">Gap ${gap}pt</span>
-        </div>
-        <div class="dual-bar">
-          <div class="dual-ops" style="width:${ops}%;background:${p.color}"></div>
-          <div class="dual-gov" style="width:${gov}%"></div>
-        </div>
-        <div class="dual-labels">
-          <span>Operational ${ops}%</span>
-          <span>Governance ${gov}%</span>
-        </div>
-      </div>`;
-  }).join('');
+// ── CRUD Actions ────────────────────────────────────────────────────────────
+function openAddProtocolModal() {
+  document.getElementById('addProtocolModal')?.classList.add('active');
 }
 
-// ── Render metric cards ───────────────────────────────────────────────────────
-function renderMetricCards() {
-  const avg = key => protoData.reduce((s, p) => s + p[key], 0) / protoData.length;
-  const avgCDI     = avg('cdi');
-  const avgGini    = avg('gini');
-  const avgEntropy = avg('entropy');
-  const avgHHI     = avg('hhi');
-
-  document.getElementById('avg-cdi').textContent     = fmt(avgCDI);
-  document.getElementById('avg-gini').textContent    = fmt(avgGini);
-  document.getElementById('avg-entropy').textContent = fmt(avgEntropy, 2);
-  document.getElementById('avg-hhi').textContent     = Math.round(avgHHI).toLocaleString();
-
-  const interp = avgCDI < 0.3 ? 'Highly Centralized' : avgCDI < 0.6 ? 'Moderately Decentralized' : 'Highly Decentralized';
-  document.getElementById('cdi-interp').textContent  = interp;
-
-  document.getElementById('cdi-fill').style.width     = (avgCDI * 100) + '%';
-  document.getElementById('gini-fill').style.width    = (avgGini * 100) + '%';
-  document.getElementById('entropy-fill').style.width = ((avgEntropy / 8) * 100) + '%';
-  document.getElementById('hhi-fill').style.width     = ((avgHHI / 10000) * 100) + '%';
+function closeAddProtocolModal() {
+  document.getElementById('addProtocolModal')?.classList.remove('active');
 }
 
-// ── Data refresh ─────────────────────────────────────────────────────────────
-function fullRefresh() {
-  // Simulate new feature values and recompute CDI(t) with adaptive weights.
-  if (!ganacheConnected || !latestGanacheSample) {
-    protoData = protoData.map(p => {
-      const b = BASE_DATA[p.id];
-      return {
-        ...p,
-        gini:           jitter(b.gini, 0.03),
-        hhi:            Math.round(jitter(b.hhi, 0.025)),
-        entropy:        jitter(b.entropy, 0.02),
-        delegationCent: clamp(jitter(b.delegationCent, 0.06)),
-        blocCluster:    clamp(jitter(b.blocCluster, 0.08)),
-        structural:     clamp(jitter(b.structural, 0.04)),
-        development:    clamp(jitter(b.development, 0.05)),
-      };
+async function submitAddProtocol(e) {
+  e.preventDefault();
+  const slug = document.getElementById('p-slug').value.trim();
+  const name = document.getElementById('p-name').value.trim();
+  const symbol = document.getElementById('p-symbol').value.trim();
+  const category = document.getElementById('p-category').value;
+  const contract = document.getElementById('p-contract').value.trim();
+  const description = document.getElementById('p-desc').value.trim();
+
+  try {
+    const payload = {
+      slug,
+      name,
+      symbol,
+      category,
+      contract_address: contract || null,
+      description: description || null,
+      color: '#378ADD',
+    };
+    await apiFetch('/protocols', { method: 'POST', body: payload, auth: true });
+    showToast(`Protocol ${name} registered successfully!`, 'success');
+    closeAddProtocolModal();
+    document.getElementById('add-protocol-form')?.reset();
+    await fullRefresh();
+  } catch (err) {
+    showToast(`Failed to register protocol: ${err.message}`, 'error');
+  }
+}
+
+async function deleteProtocol(id, name) {
+  if (!confirm(`Are you sure you want to delete '${name}'? This will remove all its snapshots and data sources.`)) {
+    return;
+  }
+  try {
+    await apiFetch(`/protocols/${id}`, { method: 'DELETE', auth: true });
+    showToast(`Protocol ${name} removed.`, 'success');
+    await fullRefresh();
+  } catch (err) {
+    showToast(`Error deleting protocol: ${err.message}`, 'error');
+  }
+}
+
+async function recalculateProtocol(id) {
+  try {
+    showToast(`Triggering on-chain sync and CDI computation...`, 'info');
+    await apiFetch('/snapshots/calculate', {
+      method: 'POST',
+      body: { protocol_id: id },
+      auth: true,
     });
-  } else {
-    applyGanacheSample(latestGanacheSample);
+    showToast(`CDI Recalculated!`, 'success');
+    await fullRefresh();
+  } catch (err) {
+    showToast(`Recalculation error: ${err.message}`, 'error');
+  }
+}
+
+async function triggerSyncJob() {
+  try {
+    showToast(`Submitting global data sync batch job...`, 'info');
+    const job = await apiFetch('/jobs', {
+      method: 'POST',
+      body: { job_type: 'ingestion' },
+      auth: true,
+    });
+    showToast(`Batch Sync Job completed (ID: ${job.id.slice(0, 8)})`, 'success');
+    await fullRefresh();
+  } catch (err) {
+    showToast(`Job trigger error: ${err.message}`, 'error');
+  }
+}
+
+// ── Alert Rule Modal ────────────────────────────────────────────────────────
+function openAddAlertModal() {
+  document.getElementById('addAlertModal')?.classList.add('active');
+}
+
+function closeAddAlertModal() {
+  document.getElementById('addAlertModal')?.classList.remove('active');
+}
+
+async function submitAddAlert(e) {
+  e.preventDefault();
+  const name = document.getElementById('a-name').value.trim();
+  const metric_name = document.getElementById('a-metric').value;
+  const condition = document.getElementById('a-cond').value;
+  const threshold = parseFloat(document.getElementById('a-thresh').value);
+  const severity = document.getElementById('a-sev').value;
+
+  try {
+    await apiFetch('/alerts/rules', {
+      method: 'POST',
+      body: { name, metric_name, condition, threshold, severity },
+      auth: true,
+    });
+    showToast(`Alert rule '${name}' created!`, 'success');
+    closeAddAlertModal();
+    document.getElementById('add-alert-form')?.reset();
+    await renderDriftAlerts();
+  } catch (err) {
+    showToast(`Error creating alert: ${err.message}`, 'error');
+  }
+}
+
+// ── Sensitivity Lab ─────────────────────────────────────────────────────────
+function updateSensitivityDropdown() {
+  const sel = document.getElementById('sens-protocol');
+  if (!sel) return;
+  const currVal = sel.value;
+  sel.innerHTML = protoData.map(p => `<option value="${p.id}" ${p.id == currVal ? 'selected' : ''}>${p.name} (${p.symbol})</option>`).join('');
+}
+
+function updateSliders() {
+  const eco = parseInt(document.getElementById('slider-w-eco')?.value || 25);
+  const gov = parseInt(document.getElementById('slider-w-gov')?.value || 25);
+  const str = parseInt(document.getElementById('slider-w-struct')?.value || 25);
+  const dev = parseInt(document.getElementById('slider-w-dev')?.value || 25);
+
+  document.getElementById('val-w-eco').textContent = `${eco}%`;
+  document.getElementById('val-w-gov').textContent = `${gov}%`;
+  document.getElementById('val-w-struct').textContent = `${str}%`;
+  document.getElementById('val-w-dev').textContent = `${dev}%`;
+}
+
+async function runSensitivityAnalysis() {
+  const protoId = parseInt(document.getElementById('sens-protocol')?.value);
+  if (!protoId) {
+    showToast('Select a valid protocol', 'error');
+    return;
   }
 
-  recomputeModelState();
+  const eco = parseInt(document.getElementById('slider-w-eco').value) / 100.0;
+  const gov = parseInt(document.getElementById('slider-w-gov').value) / 100.0;
+  const str = parseInt(document.getElementById('slider-w-struct').value) / 100.0;
+  const dev = parseInt(document.getElementById('slider-w-dev').value) / 100.0;
 
-  // Extend CDI time series (rolling)
-  PROTOCOL_META.forEach(p => {
-    const proto = protoData.find(d => d.id === p.id);
-    const newVal = clamp(jitter(proto.cdi, 0.012), 0.30, 0.90);
-    cdiSeries[p.id] = [...cdiSeries[p.id].slice(1), parseFloat(newVal.toFixed(4))];
-    const ds = cdiChart.data.datasets.find(d => d.label === p.name);
-    if (ds) ds.data = cdiSeries[p.id];
-  });
+  try {
+    const payload = {
+      protocol_id: protoId,
+      scenarios: {
+        custom_weights: { economic: eco, governance: gov, structural: str, development: dev },
+        equal_weights: { economic: 0.25, governance: 0.25, structural: 0.25, development: 0.25 },
+        governance_priority: { economic: 0.10, governance: 0.60, structural: 0.15, development: 0.15 },
+        economic_priority: { economic: 0.60, governance: 0.15, structural: 0.15, development: 0.10 },
+      }
+    };
+    const res = await apiFetch('/snapshots/sensitivity', { method: 'POST', body: payload });
+    const out = document.getElementById('sens-output-content');
+    if (out) {
+      out.innerHTML = `
+        <div style="font-size:13px;color:var(--text);margin-bottom:8px;">
+          <strong>Baseline CDI:</strong> ${res.baseline_cdi.toFixed(4)} | 
+          <strong>Cross-Scenario Variance:</strong> ${res.variance.toFixed(6)}
+        </div>
+        <table class="proto-table" style="font-size:12px;">
+          <thead><tr><th>Scenario</th><th>Simulated CDI</th><th>Deviation</th></tr></thead>
+          <tbody>
+            ${Object.entries(res.scenario_results).map(([k, v]) => {
+              const diff = v - res.baseline_cdi;
+              return `<tr>
+                <td><strong>${k.replace('_', ' ').toUpperCase()}</strong></td>
+                <td>${v.toFixed(4)}</td>
+                <td style="color:${diff >= 0 ? 'var(--success)' : 'var(--danger)'}">${diff >= 0 ? '+' : ''}${diff.toFixed(4)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+    showToast('Sensitivity analysis completed!', 'success');
+  } catch (err) {
+    showToast(`Sensitivity run error: ${err.message}`, 'error');
+  }
+}
 
-  cdiChart.update('none');
+// ── Refresh Cycle & Bootstrap ───────────────────────────────────────────────
+async function fullRefresh() {
+  await checkBackendHealth();
+  await fetchOverviewMetrics();
+  await fetchHistoricalSeries();
 
-  // Update radar
-  radarChart.data.datasets.forEach(ds => {
-    const p = protoData.find(d => d.name === ds.label);
-    if (p) ds.data = [
-      parseFloat(p.scores.economic.toFixed(3)),
-      parseFloat(p.scores.governance.toFixed(3)),
-      parseFloat(p.scores.structural.toFixed(3)),
-      parseFloat(p.scores.development.toFixed(3)),
-    ];
-  });
-  radarChart.update('none');
-  updateCentralityChart();
-
-  renderProtoTable();
-  renderMetricCards();
-  renderParadox();
-  renderDimensionScoreGrid();
-  renderWeightList();
-  renderTemporalSignals();
-  renderRiskForecast();
-  renderGovernanceHeatmap();
-  renderDriftAlerts();
-
-  document.getElementById('last-update-time').textContent =
-    new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-
+  const updateTime = document.getElementById('last-update-time');
+  if (updateTime) {
+    updateTime.textContent = new Date().toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+  }
   countdown = refreshInterval;
-
-  if (ganacheConnected && ganacheProvider) {
-    sampleGanacheData()
-      .then(sample => {
-        applyGanacheSample(sample);
-        recomputeModelState();
-        return fetchGanacheMeta((latestGanacheMeta && latestGanacheMeta.rpcServer) ? latestGanacheMeta.rpcServer.toLowerCase() : GANACHE_RPC_URLS[0]);
-      })
-      .then(meta => {
-        if (!meta) return;
-        latestGanacheMeta = meta;
-        renderGanacheMeta(meta);
-      })
-      .catch(() => {
-        ganacheProvider = null;
-        latestGanacheSample = null;
-        latestGanacheMeta = null;
-        setGanacheStatus(false, 'Ganache: Disconnected');
-        renderGanacheMeta(null);
-      });
-  }
 }
 
-function tickPrices() {
-  tokenPrices = tokenPrices.map(t => {
-    const newP = Math.max(t.base * 0.5, t.price * (1 + (Math.random() - 0.5) * 0.007));
-    return { ...t, prevPrice: t.price, price: newP, hist: [...t.hist.slice(1), newP] };
-  });
-  renderPrices();
-}
-
-// ── Countdown ring ────────────────────────────────────────────────────────────
 const RING_CIRC = 87.96;
 function updateRing() {
   const frac = countdown / refreshInterval;
   const offset = RING_CIRC * (1 - frac);
-  document.getElementById('ring-circle').setAttribute('stroke-dashoffset', offset.toFixed(2));
-  document.getElementById('countdown-num').textContent = countdown;
+  const ring = document.getElementById('ring-circle');
+  const countEl = document.getElementById('countdown-num');
+  if (ring) ring.setAttribute('stroke-dashoffset', offset.toFixed(2));
+  if (countEl) countEl.textContent = countdown;
 }
 
 function startCountdown() {
@@ -1068,60 +760,41 @@ function startCountdown() {
   }, 1000);
 }
 
-// ── Refresh interval control ──────────────────────────────────────────────────
 function setRefreshInterval(val) {
   refreshInterval = parseInt(val);
   startCountdown();
 }
 
-// ── Sidebar nav ───────────────────────────────────────────────────────────────
+function tickPrices() {
+  tokenPrices = tokenPrices.map(t => {
+    const newP = Math.max(t.base * 0.5, t.price * (1 + (Math.random() - 0.5) * 0.007));
+    return { ...t, prevPrice: t.price, price: newP, hist: [...t.hist.slice(1), newP] };
+  });
+  renderPrices();
+}
+
 function setupNavHighlight() {
-  const sections = ['overview','protocols','prices','paradox'];
+  const sections = ['overview', 'protocols', 'sensitivity', 'alerts', 'prices', 'paradox'];
   const items = document.querySelectorAll('.nav-item');
   window.addEventListener('scroll', () => {
     let current = sections[0];
     sections.forEach(id => {
       const el = document.getElementById(id);
-      if (el && el.getBoundingClientRect().top < 160) current = id;
+      if (el && el.getBoundingClientRect().top < 180) current = id;
     });
     items.forEach(item => {
-      item.classList.toggle('active', item.getAttribute('href') === '#' + current);
+      const href = item.getAttribute('href');
+      if (href && href.startsWith('#')) {
+        item.classList.toggle('active', href === '#' + current);
+      }
     });
-  }, {passive: true});
+  }, { passive: true });
 }
 
-// ── Bootstrap ─────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  buildProtoToggles();
-  buildCDIChart();
-  buildRadarChart();
-  buildCentralityChart();
-  renderPipelineFlow();
-  renderProtoTable();
-  renderPrices();
-  renderParadox();
-  renderMetricCards();
-  renderDimensionScoreGrid();
-  renderWeightList();
-  renderTemporalSignals();
-  renderRiskForecast();
-  renderGovernanceHeatmap();
-  renderDriftAlerts();
+document.addEventListener('DOMContentLoaded', async () => {
   setupNavHighlight();
+  await fullRefresh();
+  renderPrices();
   startCountdown();
-
-  document.getElementById('last-update-time').textContent =
-    new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-
-  // Price tick every 3 seconds
-  priceTimer = setInterval(tickPrices, 3000);
-
-  // Probe local Ganache silently on page load.
-  connectGanache();
-  renderGanacheMeta(null);
-
-  // Poll GraphX feed periodically when configured.
-  setGraphXStatus(false, 'GraphX: Idle');
-  if (graphXPollingTimer) clearInterval(graphXPollingTimer);
-  graphXPollingTimer = setInterval(fetchGraphXValue, 15000);
+  priceTimer = setInterval(tickPrices, 4000);
 });

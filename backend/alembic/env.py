@@ -20,11 +20,12 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# Set sync sqlalchemy url for Alembic
+# Normalize sync sqlalchemy url for Alembic
 sync_db_url = (
     settings.DATABASE_URL
-    .replace("postgresql+asyncpg://", "postgresql://")
-    .replace("sqlite+aiosqlite://", "sqlite://")
+    .replace("postgres://", "postgresql://", 1)
+    .replace("postgresql+asyncpg://", "postgresql://", 1)
+    .replace("sqlite+aiosqlite://", "sqlite://", 1)
 )
 config.set_main_option("sqlalchemy.url", sync_db_url)
 

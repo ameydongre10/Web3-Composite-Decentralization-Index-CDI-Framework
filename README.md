@@ -1,10 +1,14 @@
 # 🌐 Web3 Composite Decentralization Index (CDI) Framework
 
 [![CI Pipeline](https://github.com/ameydongre10/Web3-Composite-Decentralization-Index-CDI-Framework/actions/workflows/ci.yml/badge.svg)](https://github.com/ameydongre10/Web3-Composite-Decentralization-Index-CDI-Framework/actions)
+[![Live Platform](https://img.shields.io/badge/Render-Live%20Platform-success?logo=render&logoColor=white)](https://cdi-platform.onrender.com/)
+[![API Docs](https://img.shields.io/badge/OpenAPI-Swagger%20UI-009688?logo=fastapi&logoColor=white)](https://cdi-platform.onrender.com/api/v1/docs)
+[![Vercel Mirror](https://img.shields.io/badge/Vercel-Dashboard%20Mirror-black?logo=vercel)](https://dashboardcdi.vercel.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg)](https://fastapi.tiangolo.com/)
-[![Docker: Ready](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
+
+> **🚀 Live Production Platform:** [https://cdi-platform.onrender.com/](https://cdi-platform.onrender.com/)  
+> **⚡ Interactive Swagger API Docs:** [https://cdi-platform.onrender.com/api/v1/docs](https://cdi-platform.onrender.com/api/v1/docs)  
+> **🌐 Vercel Dashboard Mirror:** [https://dashboardcdi.vercel.app/](https://dashboardcdi.vercel.app/)
 
 > **An enterprise-grade, scientifically grounded Web3 platform for measuring, monitoring, and forecasting decentralization dynamics across decentralized protocols and DAOs.**
 

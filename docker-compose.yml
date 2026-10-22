@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cdi-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://cdi_user:cdi_secret_password@db:5432/cdi_db
+      - ADMIN_API_KEY=cdi-admin-key-2026
+      - ETHEREUM_RPC_URL=https://cloudflare-eth.com
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: cdi-postgres
+    environment:
+      POSTGRES_USER: cdi_user
+      POSTGRES_PASSWORD: cdi_secret_password
+      POSTGRES_DB: cdi_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cdi_user -d cdi_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

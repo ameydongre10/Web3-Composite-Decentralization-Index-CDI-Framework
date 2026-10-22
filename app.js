@@ -1,9 +1,11 @@
 'use strict';
 
 // ── State & API Configuration ───────────────────────────────────────────────
-const API_BASE = window.location.origin.includes('8000') || window.location.port === '8000'
-  ? '/api/v1'
-  : 'http://127.0.0.1:8000/api/v1';
+const API_BASE = window.CDI_API_URL || localStorage.getItem('CDI_API_URL') || (
+  window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? (window.location.port === '8000' ? '/api/v1' : 'http://127.0.0.1:8000/api/v1')
+    : '/api/v1'
+);
 
 const ADMIN_API_KEY = 'cdi-admin-key-2026';
 
